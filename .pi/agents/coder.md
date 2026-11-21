@@ -45,8 +45,8 @@ extend:
         - node
         - python3
         - sh
-        - pnpm test
-        - pnpm run typecheck
+        # 根目录没有 package.json，裸 `pnpm test` / `pnpm run typecheck` 在这里只会报 ENOENT；
+        # 在包目录跑的写法要显式带 --dir（`cd` 与 `&&` 会被拒）。
         - pnpm --dir packages/pi-plugin test
         - pnpm --dir packages/pi-plugin run typecheck
         - pnpm --dir packages/helper test
@@ -109,20 +109,28 @@ bindings the parent passed — a refusal names this md as its source. Two conseq
 
 ## Tests
 
-The suites are TypeScript and are type checked with the source.
+The suites are TypeScript and are type checked with the source. Run everything from the repository root
+with `mise` — the tasks know which working directory each suite needs, so you never need `cd` or `&&`
+(both are refused by the sandbox, and a command that spells them is refused before it runs).
+
 ```bash
-cd packages/pi-plugin && pnpm test    # cargo builds the helper into target/, then lint + the four suites
-pnpm run typecheck
-cargo test --manifest-path ../helper/Cargo.toml   # the helper's own tests
+mise run typecheck                                        # strict: unused locals and parameters are errors
+mise run lint                                             # eslint over src and test
+mise run test:fast                                        # lint + typecheck + unit + docs, no helper needed
+mise run test:handler                                     # the handlers: sandbox, budgets, notices, roles
+cargo test --manifest-path packages/helper/Cargo.toml      # the helper's own tests
 ```
+
+Use the task that covers what you changed, not `mise run test:all`: several suites need a real session
+and a helper, and those are the parent's acceptance run. `mise tasks` lists them all.
 
 Do not copy a helper binary into `packages/pi-plugin/bin/`. That file is the one a live session is
 executing; overwriting it fails with `ETXTBSY`, and the tests do not need it — they resolve the
-helper from cargo's `target/release/` first. `pnpm run build:helper` is the only thing that writes
+helper from cargo's `target/release/` first. `mise run setup:helper` is the only thing that writes
 `bin/`, and the parent runs it deliberately.
 
-`node test/extension.test.ts` alone works too and skips the type check; the `pretest` in `pnpm test`
-only builds the helper, it does not touch `bin/`.
+A single suite runs directly too — `node packages/pi-plugin/test/extension.test.ts` — and skips the type
+check.
 
 How to add a case:
 
