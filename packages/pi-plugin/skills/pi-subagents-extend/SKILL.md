@@ -19,6 +19,7 @@ When delegating a subagent, pass the scope of this task through `extensionBindin
 | You do not want to hand-write the scope on every dispatch (it gets forgotten when you are busy) | the role md's `extend` block | [Area roles](#area-roles-one-md-per-code-area-policy-inside-the-md) |
 | The subagent starts idling or going in circles | The other half of this package: probes | skill `pi-subagents-extend-probes` |
 | AGENTS.md mixes in rules only the main agent should see | The other half of this package: context isolation | skill `pi-subagents-extend-context` |
+| A heavy reference skill should load in a subagent only | mark it `subagent-only: true` in its own frontmatter — no bindings field; `disable-model-invocation` would hide it from the child too | [Subagent-only skills](../../../docs/usage.md#subagent-only-skills) |
 
 The criteria and the stop (read-only idling, going in circles, finishing early, writing litter, colliding with permissions) are in the other skill, `pi-subagents-extend-probes`.
 

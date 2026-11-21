@@ -349,6 +349,32 @@ everything that is not a known path tool, a safe tool, or allowlisted. Read-only
 narrow `tools` list as long as every name exists on every host (`read`, `grep`, `find`, `ls`,
 `bash`, `write` all do).
 
+## Subagent-only skills
+
+A skill that only a subagent should ever load — a heavy reference document, a workflow that
+depends on the child's tool face — is marked in its own frontmatter, once:
+
+```markdown
+---
+name: repo-architecture-reference
+description: ...
+subagent-only: true
+---
+```
+
+Before each run, the extension drops such skills from the main session's advertised skill
+list: the main agent's prompt carries neither the noise nor the temptation to run the job
+it should delegate. The child keeps the skill, because pi-subagents injects the skill text
+into the child's prompt directly — a child session has no pi-level skill catalogue to
+strip, so nothing needs to be done for it.
+
+`disable-model-invocation: true` is the wrong tool for this: pi honours it in the child
+too, so the child would lose the skill along with the main agent. The two flags answer
+different questions — `disable-model-invocation` means "no session's model may load this",
+`subagent-only` means "only a subagent's model may". One escape hatch exists on purpose: a
+prompt that explicitly names a `subagent-only` skill keeps it visible even in the main
+session, so an explicit request still wins over the default hiding.
+
 ## Without a parent agent
 
 Hand bindings reach the extension through `PI_SUBAGENT_EXTENSION_BINDINGS`:

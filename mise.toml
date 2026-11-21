@@ -94,6 +94,7 @@ for f in packages/pi-plugin/test/extension.test.ts \
          packages/pi-plugin/test/extension-judge.test.ts \
          packages/pi-plugin/test/session-start-baseline.test.ts \
          packages/pi-plugin/test/session-start-bash.test.ts \
+         packages/pi-plugin/test/main-skills.test.ts \
          packages/pi-plugin/test/session-start-wiring.test.ts \
          packages/pi-plugin/test/session-start-identity.test.ts \
          packages/pi-plugin/test/session-start-payload.test.ts; do node "$f" || exit 1; done

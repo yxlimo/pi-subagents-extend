@@ -9,6 +9,7 @@ import { canonical } from "../paths.ts";
 import { denyAll } from "../policy.ts";
 import { agentMdDirs, outputFromBlock, parseRoleName, policyFromBlock, readExtendBlock, resolveAgentFile, resolveRoleFromPrompt, setupFromBlock, worktreeFromBlock } from "../role-config.ts";
 import { setDeliverableTargetPath } from "../sandbox.ts";
+import { dropSubagentOnlySkills } from "../main-skills.ts";
 import type { Wiring } from "./context.ts";
 
 /**
@@ -271,7 +272,14 @@ export async function wireAgentStart(w: Wiring, event: BeforeAgentStartEvent, ct
 		w.call.error !== undefined ||
 		parseRoleName(prompt) !== null ||
 		resolveRoleFromPrompt(prompt, cwd, homedir()).role !== null;
-	if (!child || w.roleResolved) return;
+	if (!child) {
+		// 主会话：把 frontmatter 声明 subagent-only: true 的 skill 从可用列表摘掉
+		// （机制与理由见 main-skills.ts）。子会话不分前台后台一律不碰 skills——
+		// 子代理的 skill 列表属于给它定的那次派单。
+		dropSubagentOnlySkills(event);
+		return;
+	}
+	if (w.roleResolved) return;
 	const tag = parseRoleName(prompt);
 	const wiringKey = `${cwd}\u0000${tag}`;
 	const inFlight = w.roleWirings.get(wiringKey);
