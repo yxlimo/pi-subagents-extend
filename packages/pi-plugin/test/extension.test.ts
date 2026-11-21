@@ -199,12 +199,16 @@ import { restoreState } from "./support.ts"
   console.log("  ok   bash 白名单命中即放行并交给 helper 沙箱，其余拒绝")
 }
 
-// 13. bash without an allowlist stays closed, with a hint about bash.read/bash.write.
+// 13. bash without an allowlist stays closed, and the hint names the column that actually opens it.
+//     The message used to say "bash.read / bash.write" — the deprecated pair, one of which the md
+//     block rejects outright. A refusal that teaches a spelling the reader refuses is worse than no
+//     hint, so this pins `allow` and pins the absence of the legacy names.
 {
   const h = await handler({ bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["src/**"] } }) })
   const denied = await h.call("bash", { command: "pnpm test" })
   assert.equal(denied?.block, true, "bash is denied when no allowlist is configured")
-  assert.match(denied.reason, /bash\.read/, "denial explains how to open it")
+  assert.match(denied.reason, /bash\.allow/, "denial names the column that opens it")
+  assert.doesNotMatch(denied.reason, /bash\.read|bash\.write/, "denial does not teach the legacy columns")
   h.restore()
   console.log("  ok   没配 bash 白名单时 bash 仍然关闭，拒绝文案给出开法")
 }

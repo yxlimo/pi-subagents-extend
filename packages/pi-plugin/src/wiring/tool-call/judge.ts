@@ -1,10 +1,12 @@
 import type { ExtensionAPI, ExtensionContext, ToolCallEvent, ToolCallEventResult } from "@earendil-works/pi-coding-agent";
 import { homedir } from "node:os";
+import { readFileSync } from "node:fs";
+import { parse } from "yaml";
 import { allEntries, classifyCommand, commandAccess, commandMatches, deniedEntry, deniedEnvAssignment, pathCandidates, requiresNetwork, type BashRule } from "../../bash-match.ts";
-import { headEntriesHint, warnUntrackedWorktreeProfile } from "../../notices.ts";
+import { dispatchToolFaceRefusal, headEntriesHint, warnUnresolvedAgentName, warnUntrackedWorktreeProfile } from "../../notices.ts";
 import { STOP_NOTICE } from "../../probe.ts";
 import { shouldDefaultWorktree, WORKTREE_TOOLS } from "../../worktree-default.ts";
-import { BINDING_NAMESPACE, bindingKey, readExtendBlock, resolveAgentFile, worktreeFromBlock } from "../../role-config.ts";
+import { agentMdDirs, BINDING_NAMESPACE, bindingKey, readExtendBlock, resolveAgentFile, worktreeFromBlock } from "../../role-config.ts";
 import { asObject, matches, type Policy } from "../../policy.ts";
 import { dependencyGateVerdict } from "../../dependencies.ts";
 import { expandPath, privatisedDirs, resolveComparable, underRoot } from "../../paths.ts";
@@ -19,7 +21,9 @@ import { bail, deny, pathToolVerdict, preview, writeBail } from "./paths.ts";
  * 同一形状（imports 只来自 node:* 与叶子模块，不来自 index.ts）。
  *
  * 闸门顺序是有意为之，别打乱（自上而下）：
- * 1. 派单默认值补值与版本告警先于范围判定（补值不是拒绝，不进 deny 预算）；
+ * 1. 派单预检（工具面冲突的拒绝、解析不到角色 md 的告警）、派单默认值补值与版本
+ *    告警先于范围判定 —— 预检判的是 pi-subagents 自己的解析与宿主工具面，与本层
+ *    策略激活无关；补值不是拒绝，预检的拒绝是配置冲突，只拒不计入预算；
  * 2. 策略未激活直接放行；
  * 3. SAFE_TOOLS（求援通道）最先放行，不受任何停机影响；
  * 4. 已停机的会话挡住其后的一切（terminate）；
@@ -188,8 +192,10 @@ function worktreePolicyFor(
 	cwd: string,
 	call: Record<string, unknown> | undefined,
 	agent: string,
+	/** 调用方（预检）已解析过的 md 文件；缺省时按 agent 现场解析，目录序与 resolveAgentFile 相同。 */
+	resolvedMdFile?: string,
 ): WorktreeStrategy {
-	const mdFile = resolveAgentFile(agent, cwd, homedir()) ?? undefined;
+	const mdFile = resolvedMdFile ?? (resolveAgentFile(agent, cwd, homedir()) ?? undefined);
 	const block = mdFile ? readExtendBlock(mdFile).block : undefined;
 	const enabled = worktreeFromBlock(block ?? {}).worktree?.enabled === true;
 	if (enabled && (call?.worktree === undefined || call?.worktree === null)) {
@@ -197,6 +203,40 @@ function worktreePolicyFor(
 	}
 	return call?.worktree === true ? { worktree: true, fromMd: false } : { fromMd: false };
 }
+
+/**
+ * 角色 md frontmatter 顶层的 `tools:` 列表 —— pi-subagents 检查子代理工具面用的
+ * 就是这份声明，预检读同一份事实，不自己发明检查。
+ *
+ * 没有读得到文件、没有 frontmatter、没有 `tools:`、不是非空字符串数组、YAML 解不开
+ * —— 一律 undefined（fail open）：预检漏报只是少一次提前拒绝，误报会把一条本来能跑
+ * 的派单打死在插件层。文件切片这一段与 readExtendBlock 的 frontmatter 外壳重复，
+ * 但那份代码在 role-config.ts 里只返回 extend 块，而本文件被授权改动的清单里没有
+ * role-config.ts —— 能把外壳提进共享层时再合，先不为此越权。
+ */
+const declaredToolsOf = (mdFile: string): string[] | undefined => {
+	let text: string;
+	try {
+		text = readFileSync(mdFile, "utf8");
+	} catch {
+		return undefined;
+	}
+	const lines = text.split(/\r?\n/);
+	if (lines[0]?.trim() !== "---") return undefined;
+	const end = lines.findIndex((line, index) => index > 0 && line.trim() === "---");
+	if (end < 0) return undefined;
+	let parsed: unknown;
+	try {
+		parsed = parse(lines.slice(1, end).join("\n"));
+	} catch {
+		return undefined;
+	}
+	const frontmatter =
+		parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : undefined;
+	const tools = frontmatter?.tools;
+	if (!Array.isArray(tools) || tools.length === 0 || tools.some((tool) => typeof tool !== "string")) return undefined;
+	return tools as string[];
+};
 
 /** 工具名 → schema 里的路径入参名；一处缓存，避免每次调用都问一遍注册表。缓存由 activate 持有并传入。 */
 const pathArgFromSchema = (
@@ -271,17 +311,41 @@ export const judgeToolCall = async ({
 		const ui = ctx.ui as { notify?: (m: string, t?: string) => void } | undefined;
 		ui?.notify?.(message, "warning");
 	};
-	// 派单默认值先于范围判定：父会话没有 bindings 时同样按角色 md 补上。
-	// 补值不是拒绝，不进 deny 预算；策略解析不到就什么都不做。
+	// 派单预检与默认值补值先于范围判定：父会话常常根本没有 bindings（本层策略不激活），
+	// 而这两条判的是 pi-subagents 自己的解析与宿主工具面，跟本层策略激活与否无关。
+	// 补值不是拒绝，不进 deny 预算；预检的拒绝是配置冲突，只拒不计（放宽授权治不了它）。
 	if (WORKTREE_TOOLS.has(event.toolName)) {
 		const candidate = event.input as { agent?: unknown; worktree?: unknown; extensionBindings?: unknown } | undefined;
 		const agent = candidate?.agent;
 		if (candidate && typeof agent === "string" && agent.trim()) {
 			const cwd = ctx.cwd ?? process.cwd();
+			const name = agent.trim();
+			// check 1 / check 2：md 解析得到就比工具面，解析不到就告警一次。都在 spawn 之前
+			// 发生 —— 派单失败得快，是因为 pi-subagents 在子会话起来之后才检查这些，报出来的
+			// 话没人能照着改；这里把同一件事提前到 tool_call，且带上因果。
+			const mdFile = resolveAgentFile(name, cwd, homedir()) ?? undefined;
+			if (!mdFile) {
+				// check 2 只告警不拒：builtin 代理（worker、scout、delegate…）本来就没有
+				// md，拒了会打死最常见的用法。告警让「名字其实落在了 builtin 别名上、
+				// 角色 md 的策略根本没生效」这件事在派单前可见。
+				warnUnresolvedAgentName(name, cwd, agentMdDirs(cwd, homedir()), w.uiWarning);
+			} else {
+				// check 1 只在 md 自己声明了 tools: 时才比：那是 pi-subagents 检查子代理
+				// 工具面用的同一份声明，本层不替 pi-subagents 发明检查。声明缺失、类型
+				// 不对、宿主没暴露活动面（测试桩）一律放行 —— 漏报只是少一次提前拒绝。
+				const declared = declaredToolsOf(mdFile);
+				const active = declared ? (pi as { getActiveTools?: () => string[] }).getActiveTools?.() : undefined;
+				if (declared && active) {
+					const missing = declared.filter((tool) => !active.includes(tool));
+					if (missing.length > 0) {
+						return deny(dispatchToolFaceRefusal(name, mdFile, missing));
+					}
+				}
+			}
 			// 只有 worktree 这一个决策把本次派单自带的 bindings 叠在会话 bindings 之上；
 			// 其余策略解析仍用会话启动时定格的那一份，范围不因单次派单而变。
 			const own = asObject(candidate.extensionBindings)?.[bindingKey()];
-			const strategy = worktreePolicyFor(cwd, { ...w.call.config, ...w.call.blocks, ...asObject(own) }, agent.trim());
+			const strategy = worktreePolicyFor(cwd, { ...w.call.config, ...w.call.blocks, ...asObject(own) }, name, mdFile);
 			if (shouldDefaultWorktree(strategy, event.toolName, event.input)) {
 				candidate.worktree = true;
 				if (strategy.fromMd && strategy.mdFile) warnUntrackedWorktreeProfile(cwd, strategy.mdFile, w.uiWarning);
@@ -330,7 +394,7 @@ export const judgeToolCall = async ({
 		if (!rule) {
 			return bail(
 				w,
-				`pi-subagents-extend: bash is not allowed here (source: ${w.policy.source}). For tests or a typecheck the parent must list the commands in bash.read / bash.write.`,
+				`pi-subagents-extend: bash is not allowed here (source: ${w.policy.source}). For tests or a typecheck the parent must list the commands in bash.allow.`,
 			);
 		}
 		if (!command) return deny("pi-subagents-extend: empty bash command");

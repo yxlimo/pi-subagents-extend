@@ -261,3 +261,39 @@ export function warnUntrackedWorktreeProfile(cwd: string, mdFile: string, warn: 
 		`pi-subagents-extend: \`worktree: true\` runs the subagent in a worktree copy, but the role md ${relPath} is not tracked by git, so the worktree copy will not contain it and the child will run with no role policy. Commit the role md so the worktree child can identify its role.`
 	);
 }
+
+/**
+ * check 2 的护栏：派单点名了一个解析不到 md 的角色名，每个名字整进程只说一次。
+ * 不挂在 session_start 清空的那组集合里（那份清单由 session-start.ts 负责，本文件
+ * 的授权清单里没有它）；与 warnedCompatLayer 同一取舍 —— 同一个名字解析不到 md 这件
+ * 事实在进程内不会变，重复提醒只是刷屏。
+ */
+export const warnedUnresolvedAgentNames = new Set<string>();
+
+/**
+ * check 2 —— 派单点名了一个从生效 cwd 解析不到任何角色 md 的名字。
+ *
+ * 只告警不拒绝：builtin 代理（worker、scout、delegate…）本来就没有 md，拒了会把
+ * 现有最常见的用法打死。要说清三件事：生效 cwd、查过哪些目录、以及 pi-subagents
+ * 可能把名字落到 builtin 别名上 —— 那时角色 md 的策略完全不生效，起作用的是
+ * builtin 自己的工具面。这条告警本来能救的是这种派单：名字实际命中了别名，调用方
+ * 却以为有一个带策略的角色 md 在管着子代理。
+ */
+export function warnUnresolvedAgentName(agent: string, cwd: string, dirs: string[], warn: ((message: string) => void) | undefined): void {
+	if (warnedUnresolvedAgentNames.has(agent)) return;
+	warnedUnresolvedAgentNames.add(agent);
+	warn?.(
+		`pi-subagents-extend: no ${agent}.md is visible from the dispatch cwd ${cwd} — consulted: ${listedJoin(dirs)}. pi-subagents may resolve "${agent}" to a builtin alias instead, in which case the role md's policy will not apply and the builtin agent's own tool list governs. If a role md was meant, put it in one of the consulted directories, or dispatch with the cwd that contains it.`
+	);
+}
+
+/**
+ * check 1 —— 角色 md 的 frontmatter `tools:` 里声明了宿主工具面上没有的工具。
+ * pi-subagents 在 spawn 之后会用同一份声明检查子代理的工具面，检查不过就是一句
+ * 没人能照着改的拒绝（实测 fbdf1d81：md 声明 edit，宿主被 pi-hashline-edit-pro
+ * 换掉了 edit，整条派单两秒内死掉）。这里在 spawn 之前拒掉同一件事，点名缺的
+ * 工具与最可能的原因。
+ */
+export function dispatchToolFaceRefusal(agent: string, mdFile: string, missing: string[]): string {
+	return `pi-subagents-extend: dispatch refused before spawn: the agent md ${mdFile} for "${agent}" declares tools this host does not offer: ${missing.join(", ")}. Most likely an extension in this host replaced the tool set (pi-hashline-edit-pro, for example, swaps out the built-in edit family), so the agent definition and the host disagree; pi-subagents would refuse this dispatch anyway, with a message nobody can act on. Fix the md's tools: list, or restore the tools in the host's active tool set.`;
+}

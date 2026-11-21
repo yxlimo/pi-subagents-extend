@@ -35,7 +35,18 @@ export async function wireSessionStart(w: Wiring, _options: ActivateOptions, _ev
 	if (!w.policy.active) return;
 	const budget = w.policy.maxReads > 0 ? `, read budget ${w.policy.maxReads}` : "";
 	const bash = w.policy.bash
-		? `, bash ${w.policy.bash.read.length} read / ${w.policy.bash.write.length} write`
+		/**
+		 * 报「配置里到底有什么」，不是「哪一列有值」：Phase 2 之后合法配置只用 `allow`，
+		 * 而这一行曾经只数 legacy 的 read/write，于是只用 allow 的角色在启动摘要里显示成
+		 * `bash 0 read / 0 write` —— 白名单满的，摘要却说空。legacy 列只在真的配了才提。
+		 */
+		? (() => {
+			const parts: string[] = [];
+			if (w.policy.bash.allow.length > 0) parts.push(`${w.policy.bash.allow.length} allowed`);
+			if (w.policy.bash.read.length > 0) parts.push(`${w.policy.bash.read.length} read`);
+			if (w.policy.bash.write.length > 0) parts.push(`${w.policy.bash.write.length} write`);
+			return `, bash ${parts.join(" / ") || "no entries"}`;
+		})()
 		: ", bash off";
 	const probeLine = w.probe ? ", probe on" : "";
 	const storeLine = w.policy.bash ? `, pnpm store ${detectPnpmStore(cwd).path ?? "detection failed"}` : "";

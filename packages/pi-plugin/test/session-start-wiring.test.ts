@@ -431,3 +431,25 @@ const rc = (await import(join(repo, "src", "role-config.ts"))) as unknown as typ
   console.log("  ok   setup in a dispatch payload warns once at either level and changes nothing")
 }
 
+// 267. The startup summary must report what the config holds, not which columns happen to be set.
+//      It counted the legacy read/write columns only, so a role using the current single-column
+//      `allow` spelling — every role md in this repo — reported "bash 0 read / 0 write" at startup
+//      while its allowlist was full. A summary that contradicts the config is worse than none: the
+//      parent reads it as "bash is effectively off" and never looks again.
+{
+  // The summary is posted at session_start, which is where a bindings-carrying session gets its
+  // policy. A child whose policy arrives with the role md resolves it in before_agent_start instead,
+  // so it never reaches this line — the reachable shape is a parent or a bindings-driven child.
+  const h = await handler({
+    bindings: JSON.stringify({
+      "pi-subagents-extend/1": { scope: ["."], bash: { allow: ["git status", "rg"] } },
+    }),
+  })
+  const summary = h.ui.find((m) => m.includes("scope active"))
+  assert.ok(summary, `a startup summary is posted, got: ${h.ui.join("\n")}`)
+  assert.match(summary, /bash 2 allowed/, "the summary counts the allow entries")
+  assert.doesNotMatch(summary, /0 read \/ 0 write/, "and never claims the allowlist is empty")
+  h.restore()
+  console.log("  ok   the startup summary counts the allow column instead of reporting legacy zeros")
+}
+
