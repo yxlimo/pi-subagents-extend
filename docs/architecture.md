@@ -152,7 +152,7 @@ Rules per field — a field the dispatch names wins, a field it omits is filled 
   These are grants, so a caller narrowing them is legitimate — a dispatch is made tighter than its
   role simply by writing a shorter list. For these columns an **explicitly empty array in the
   dispatch** is a different instruction: it empties that column rather than adding nothing.
-  Reading `"read": []` as "add zero entries" left the role md's whole allowlist in place, so a
+  Reading `"allow": []` as "add zero entries" left the role md's whole allowlist in place, so a
   dispatch that meant to close bash kept the grant. `bash.write` and `bash.allow` are separate
   columns: `write` grants write, `allow` leaves the read/write judgement to the extension.
 - **union, hard floor** — `bash.deny`: **no caller can relax it**. That is what makes a project's

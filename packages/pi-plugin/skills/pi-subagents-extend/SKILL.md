@@ -96,8 +96,7 @@ subagent(
       "permissions": {
         "scope": ["src/auth/**"],
         "bash": {
-          "read": ["pnpm run typecheck"],
-          "write": ["pnpm test"],
+          "allow": ["pnpm run typecheck", "pnpm test"],
           "writable": true,
           "writablePaths": ["~/.local/share/pnpm/store"]
         }

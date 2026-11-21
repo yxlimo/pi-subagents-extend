@@ -178,7 +178,7 @@ The report is longer than a reply can carry, and a reviewer that cannot write ha
   "allowTools": ["read", "grep", "find", "ls", "bash", "write", "contact_supervisor"],
   "maxDenies": 12,
   "maxWriteDenies": 2,
-  "bash": { "writable": false, "dependencyGate": false, "read": ["git diff", "git show", "rg", "cat", "ls"] }
+  "bash": { "writable": false, "dependencyGate": false, "allow": ["git diff", "git show", "rg", "cat", "ls"] }
 }
 ```
 
@@ -201,8 +201,7 @@ The whole tree readable and writable, with publishing reserved to the parent.
   "scope": ["."],
   "writeScope": ["."],
   "bash": {
-    "read": ["git status", "git diff", "git log", "ls", "rg", "cat", "node", "sh"],
-    "write": ["pnpm", "cargo", "mkdir", "cp", "mv", "rm", "touch", "git add", "git switch", "git stash"],
+    "allow": ["git status", "git diff", "git log", "ls", "rg", "cat", "node", "sh", "pnpm", "cargo", "mkdir", "cp", "mv", "rm", "touch", "git add", "git switch", "git stash"],
     "deny": ["git commit", "git push", "git rebase", "git merge", "git reset", "git clean", "rm -rf"]
   }
 }
@@ -214,7 +213,7 @@ that is what a deny list is for, and it is the one part of the role md a caller 
 ### A read-only researcher
 
 ```json
-{ "scope": ["."], "readOnly": true, "maxReads": 60, "bash": { "read": ["rg", "git log", "git show", "ls"] } }
+{ "scope": ["."], "readOnly": true, "maxReads": 60, "bash": { "allow": ["rg", "git log", "git show", "ls"] } }
 ```
 
 `maxReads` is a task-shape signal, not a security control: a researcher that needs 200 reads is
@@ -223,7 +222,7 @@ usually reading the wrong things. Hitting the cap is a refusal, so it is charged
 ### A build or test runner
 
 ```json
-{ "scope": ["."], "writeScope": ["."], "bash": { "writable": true, "read": ["pnpm test", "cargo test", "cargo check"] } }
+{ "scope": ["."], "writeScope": ["."], "bash": { "writable": true, "allow": ["pnpm test", "cargo test", "cargo check"] } }
 ```
 
 `bash.writable` opens the write scope plus the machinery a build needs: `node_modules`, the
@@ -307,7 +306,7 @@ the role md's list, an omitted field is filled from it:
     "permissions": {
       "scope": ["src/auth/**"],
       "allowTools": ["read"],
-      "bash": { "read": ["pnpm run typecheck"] }
+      "bash": { "allow": ["pnpm run typecheck"], "writable": true }
     }
   }
 }
@@ -317,10 +316,10 @@ That dispatch may run `pnpm run typecheck` and nothing else, and its `allowTools
 `["read"]`, not a union with the role's list, however many commands and tools that role md carries.
 
 An explicit empty list is a third instruction, distinct from both "omitted" and "one more entry":
-`"read": []` says *this column is empty* and replaces the column the role md supplied, while
-omitting `read` inherits it and `"read": ["x"]` replaces it with one entry. So
-`"bash": { "read": [], "write": [] }` turns bash off for a dispatch even when its role carries a
-long allowlist — writing the empty lists is how you say "none of it", and it is the same refusal
+`"allow": []` says *this column is empty* and replaces the allowlist the role md supplied, while
+omitting `allow` inherits it and `"allow": ["x"]` replaces it with one entry. So
+`"bash": { "allow": [] }` turns bash off for a dispatch even when its role carries a
+long allowlist — writing the empty list is how you say "none of it", and it is the same refusal
 as having no `bash` field at all.
 
 A dispatch that sets `readOnly: true` without a `writeScope` is read-only even when the role md carries
