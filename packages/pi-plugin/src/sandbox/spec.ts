@@ -264,9 +264,22 @@ export function sweepStaleSpecFiles(): void {
 }
 
 /**
- * 把命令交给 helper：它在 exec 前给自己套上 Landlock 与网络命名空间，所以白名单命令
- * 拿到的就是已经限定好范围、断好网的进程。
+ * helper 的「网络已隔离」成功提示只在会话第一条离线命令上有新闻；之后由调用方给
+ * helper 的环境设这个变量（值固定 "1"），helper 读到它就不再播报成功行。只静音
+ * 成功行：降级警告（cannot enter the namespaces …）每次都要说 —— 那条才是「这条
+ * 命令没有真命名空间」的信号。
  */
-export function wrapInSandbox(command: string, specFile: string, helper: string): string {
-	return [helper, "--spec", specFile, "--", "bash", "-lc", command].map(shellQuote).join(" ");
+export const QUIET_NETWORK_NOTICE_ENV = "PI_SUBAGENTS_EXTEND_QUIET_NETWORK_NOTICE";
+
+/**
+ * 把命令交给 helper：它在 exec 前给自己套上 Landlock 与网络命名空间，所以白名单命令
+ * 拿到的就是已经限定好范围、断好网的进程。announce=false 表示本会话已经播报过
+ * 「网络已隔离」：给 helper 调用加 `QUIET_NETWORK_NOTICE_ENV=1` 前缀让它安静。
+ * 前缀只落在 helper 本身上，`--` 之后的用户命令段逐字节不变 —— 命令匹配规则看到的
+ * 仍是原来那条命令。
+ */
+export function wrapInSandbox(command: string, specFile: string, helper: string, announce = true): string {
+	const argv = [helper, "--spec", specFile, "--", "bash", "-lc", command].map(shellQuote);
+	const prefix = announce ? "" : `${QUIET_NETWORK_NOTICE_ENV}=1 `;
+	return `${prefix}${argv.join(" ")}`;
 }

@@ -56,6 +56,12 @@ export interface WiringState {
 		string,
 		{ write: string[]; cwd: string; offline: boolean; command: string; specFile?: string }
 	>;
+	/**
+	 * helper 的「网络已隔离」提示每会话只播报一次：第一条离线命令照常播报，之后的
+	 * 离线命令由 wrapInSandbox 加 quiet 前缀。住在会话状态上而不是模块级变量上 ——
+	 * 模块级的记牌会跨会话泄漏，第二个会话的第一条命令就被静音了。
+	 */
+	sandboxNetworkNoticeAnnounced: boolean;
 	denyCounter: DenyCounter;
 	/** 写拒单独计数：写拒的正解是换交付方式（回报告），跟「授权写错」不是一类信号。 */
 	writeDenyCounter: DenyCounter;
@@ -116,6 +122,7 @@ export function createWiring(): Wiring {
 			string,
 			{ write: string[]; cwd: string; offline: boolean; command: string; specFile?: string }
 		>(),
+		sandboxNetworkNoticeAnnounced: false,
 		denyCounter: new DenyCounter(policy.maxDenies),
 		writeDenyCounter: new DenyCounter(policy.maxWriteDenies, "write"),
 		allowedReads: 0,

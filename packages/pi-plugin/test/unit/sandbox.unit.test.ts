@@ -1,6 +1,7 @@
 // Offline unit tests for the sandbox layer's own decisions: write-grant
-// derivation (grants), the spec shape handed to the helper (spec) and the
-// dependency gate (dependencies).
+// derivation (grants), the spec shape handed to the helper (spec), the
+// dependency gate (dependencies), and how a command is wrapped for the
+// helper (the announce/quiet prefix of wrapInSandbox).
 //
 // No handler, no childRun, no fake pi API: these cases call
 // sandboxWritableDirs / buildSpec / dependencyGateVerdict directly, so a bug in
@@ -13,9 +14,10 @@ import { existsSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node
 import { join } from "node:path"
 import { dependencyGateVerdict } from "../../src/dependencies.ts"
 import { sandboxWritableDirs } from "../../src/sandbox/grants.ts"
-import { buildSpec, scratchDir } from "../../src/sandbox/spec.ts"
+import { QUIET_NETWORK_NOTICE_ENV, buildSpec, scratchDir, wrapInSandbox } from "../../src/sandbox/spec.ts"
 import { stateDir } from "../state-dir.ts"
 
+import { createWiring } from "../../src/wiring/context.ts"
 // 单元测试不导入 harness（那会牵起 helper 解析与扩展加载），所以这里直接用 state-dir 的
 // 约定而不是 harness 的再导出：沙箱里落在工作树根的 .test-state（角色授权覆盖它），本地则回退
 // 到包目录下被 gitignore 的 .test-*。
@@ -212,4 +214,37 @@ const writeRule = (extra: Record<string, unknown> = {}): never =>
   console.log("  ok   the ignore list exempts the named directory and honours directory boundaries")
 }
 
-console.log("  sandbox.unit: 9 cases passed")
+// helper 的「网络已隔离」提示打到 stderr，每条离线命令都落进模型上下文一次。
+// 改法：wrapInSandbox 给 helper 调用加一个环境变量前缀，helper 读到就不再播报
+// 成功行（降级警告不受影响，每次照说）。前缀只准落在 helper 本身：`--` 之后的
+// 用户命令段必须逐字节不变 —— 命令匹配规则看到的仍然是原来那条命令。
+const afterHelper = (wrapped: string): string => wrapped.slice(wrapped.indexOf("'--' ") + 5)
+{
+  const command = "pnpm run typecheck"
+  const announce = wrapInSandbox(command, "/tmp/spec-a.json", "/opt/helper")
+  assert.ok(announce.startsWith("'/opt/helper'"), "the first wrapped command carries no quiet prefix")
+  assert.ok(!announce.includes(QUIET_NETWORK_NOTICE_ENV), "and says nothing about the quiet variable")
+  assert.equal(afterHelper(announce), `'bash' '-lc' '${command}'`, "the user command segment after -- is byte-identical to the input")
+  console.log("  ok   the first wrapped command announces and keeps the user command byte-identical")
+}
+{
+  const command = "pnpm run typecheck"
+  const announce = wrapInSandbox(command, "/tmp/spec-a.json", "/opt/helper")
+  const quiet = wrapInSandbox(command, "/tmp/spec-a.json", "/opt/helper", false)
+  assert.ok(quiet.startsWith(`${QUIET_NETWORK_NOTICE_ENV}=1 '/opt/helper'`), "an already-announced call prefixes the helper invocation with the quiet variable")
+  assert.equal(afterHelper(quiet), afterHelper(announce), "the quiet prefix does not touch the user command segment")
+  console.log("  ok   a later wrapped command is quiet and its user command segment is unchanged")
+}
+
+// 调用方侧的状态（谁传 announce=false）：judgeToolCall 的完整调用链需要 helper
+// 二进制（describeHelper 真的会跑 `--describe`），单元腿不带它，所以这里只钉得住
+// 不需要二进制的那一半：记牌住在 WiringState 上，新会话从「未播报」起步 —— 每份
+// createWiring() 一个值，不存在跨会话泄漏的模块级开关。第二次调用带不带前缀由
+// handler 层（stub helper）覆盖。
+{
+  const wiring = createWiring()
+  assert.equal(wiring.sandboxNetworkNoticeAnnounced, false, "a fresh session's wiring starts unannounced, so its first offline command still speaks")
+  console.log("  ok   a fresh session's wiring starts unannounced")
+}
+
+console.log("  sandbox.unit: 12 cases passed")

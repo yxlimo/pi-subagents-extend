@@ -160,11 +160,19 @@ fn apply(program: &OsString, program_args: &[OsString], spec: &Spec) -> Result<i
                     ),
                 ));
             }
-            // Say it once, and always for an offline command: whether the
-            // namespaces are real is the difference between a structural "no
-            // route out" and Landlock's coarse port rules, and a run that says
-            // nothing is indistinguishable from one that fell back.
-            if spec.offline {
+            // Always let an offline command say whether its namespaces are
+            // real: that is the difference between a structural "no route
+            // out" and Landlock's coarse port rules, and a run that says
+            // nothing is indistinguishable from one that fell back. The
+            // success line itself carries no news after a session's first
+            // offline command, though, and it lands in the model's context
+            // once per bash call — so the caller sets
+            // PI_SUBAGENTS_EXTEND_QUIET_NETWORK_NOTICE=1 on the second and
+            // later invocations, and only this success pair goes quiet. The
+            // degraded branch below is never silenced: there the warning is
+            // news on every single command.
+            let quiet = matches!(std::env::var("PI_SUBAGENTS_EXTEND_QUIET_NETWORK_NOTICE").as_deref(), Ok("1"));
+            if spec.offline && !quiet {
                 let shadowed: Vec<String> = isolated
                     .shadowed
                     .iter()

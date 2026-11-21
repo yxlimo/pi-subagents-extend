@@ -540,7 +540,17 @@ export const judgeToolCall = async ({
 			offline: spec.offline,
 			specFile,
 		});
-		(event.input as { command?: string }).command = wrapInSandbox(command, specFile, helper);
+		(event.input as { command?: string }).command = wrapInSandbox(
+			command,
+			specFile,
+			helper,
+			// helper 的「网络已隔离」提示每会话只值一次：本会话还没播报过就照常播报；
+			// 播报过之后（见下）的离线命令加 quiet 前缀让它安静。
+			!w.sandboxNetworkNoticeAnnounced,
+		);
+		// 只有离线命令会让 helper 播报，所以只在这里翻牌：会话先跑了在线命令时，
+		// 第一条离线命令仍然是全会话的第一次播报。
+		if (spec.offline) w.sandboxNetworkNoticeAnnounced = true;
 		return undefined;
 	}
 	if (EXEC_TOOLS.includes(event.toolName)) {
