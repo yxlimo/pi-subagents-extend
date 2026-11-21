@@ -236,3 +236,81 @@ function writeAgentMdRaw({ cwd, role, frontmatter }: { cwd: string; role: string
   h.restore()
   console.log("  ok   a dispatch whose agent md resolves stays silent")
 }
+
+// 10. Gate order, RUNTIME_TOOLS: a live scoped session with an empty allowTools still gets
+//     `todo` — it is a session-runtime tool that touches no file, so refusing it costs a
+//     child its plan between turns while granting it leaks nothing. The gate sits after the
+//     stopped gate and before allowTools. The assertion is on the verdict itself: undefined
+//     means nothing was blocked, not merely that no exception was thrown.
+{
+  const h = await handler({
+    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["**"] } }),
+  })
+  const outcome = await h.call("todo", { todos: [] })
+  assert.equal(outcome, undefined, `a live session lets todo through unblocked, got: ${JSON.stringify(outcome)}`)
+  h.restore()
+  console.log("  ok   a live scoped session with no allowTools still gets todo")
+}
+
+// 11. Negative control for case 10, same bindings: an unknown non-runtime tool is still
+//     refused. Without this, a regression that allowed everything would satisfy case 10.
+{
+  const h = await handler({
+    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["**"] } }),
+  })
+  const refused = await h.call("webfetch", { url: "https://example.com" })
+  assert.ok(refused && refused.block, "an unknown non-runtime tool is still refused")
+  assert.match(refused.reason, /not on the allow list/, `the refusal is the allowTools bail, got: ${refused.reason}`)
+  h.restore()
+  console.log("  ok   the same bindings still refuse an unknown non-runtime tool")
+}
+
+// 12. Gate order, RUNTIME_TOOLS vs the stop gate: once the session is stopped, todo is
+//     refused and the refusal is the stop notice. This is what separates RUNTIME_TOOLS
+//     from SAFE_TOOLS — had todo been written into SAFE_TOOLS, the SAFE_TOOLS check would
+//     run BEFORE the stopped gate and this call would come back undefined. maxDenies: 1
+//     reaches the hard stop in two refusals (first warns, second stops).
+{
+  const h = await handler({
+    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["**"], maxDenies: 1 } }),
+  })
+  const first = await h.call("webfetch", { url: "https://example.com" })
+  assert.ok(first && first.block, "the first refusal warns")
+  assert.ok(!first.terminate, "the first refusal does not stop the run")
+  const second = await h.call("webfetch", { url: "https://example.com" })
+  assert.ok(second && second.terminate, "the second refusal is the hard stop")
+  const todo = await h.call("todo", { todos: [] })
+  assert.ok(todo && todo.block, `a stopped session refuses todo, got: ${JSON.stringify(todo)}`)
+  assert.equal(todo.terminate, true, "the refusal is terminal, like every post-stop call")
+  assert.match(todo.reason, /this run stops here/, `the refusal is the stop notice, got: ${todo.reason}`)
+  h.restore()
+  console.log("  ok   after the stop, todo is refused with the stop notice — not a SAFE_TOOLS pass-through")
+}
+
+// 13. Counter behaviour: an ALLOWED todo call must not reset the denial budget, or a child
+//     can interleave todo between two refusals and never reach the hard stop — the same
+//     exploit that already forced contact_supervisor out of the reset. todo is granted via
+//     allowTools here on purpose: that path bypasses both the SAFE_TOOLS check and the
+//     RUNTIME_TOOLS gate, so the case is red against any build that grants todo yet forgets
+//     the reset exclusion in index.ts (a reset clears #warned too, so the second refusal
+//     would warn again instead of stopping).
+{
+  const h = await handler({
+    bindings: JSON.stringify({
+      "pi-subagents-extend/1": { scope: ["**"], allowTools: ["todo"], maxDenies: 1 },
+    }),
+  })
+  const first = await h.call("webfetch", { url: "https://example.com" })
+  assert.ok(first && first.block, "the first refusal warns")
+  assert.ok(!first.terminate, "the first refusal does not stop the run")
+  const todo = await h.call("todo", { todos: [] })
+  assert.equal(todo, undefined, "todo itself is allowed")
+  const second = await h.call("webfetch", { url: "https://example.com" })
+  assert.ok(
+    second && second.terminate,
+    `the second refusal reaches the hard stop despite the interleaved todo, got: ${JSON.stringify(second)}`,
+  )
+  assert.match(second.reason, /denial budget/, "the stop names its criterion")
+  h.restore()
+  console.log("  ok   an allowed todo does not reset the denial budget; the hard stop still lands")
+}

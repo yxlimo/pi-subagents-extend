@@ -32,7 +32,8 @@
  *   读面不收紧（工具链在 /nix/store，收窄读根会打死所有命令）；只读类命令另加一条路径引导：
  *   参数里看起来像路径的 token 按真实路径判，落在范围外就被点名拒绝，并指回去用 read 工具
  * - powershell / codemode：一律拒绝（没有路径可判，能绕过范围）
- * - structured_output 与 allowTools 里列出的工具：放行（执行器类不可放行）
+ * - structured_output / todo 与 allowTools 里列出的工具：放行（执行器类不可放行；
+ *   todo 是会话运行时工具，只在停机闸门之后放行，也不豁免拒绝计数的归零）
  * - 其余未知工具：拒绝
  *
  * 通配符：** 任意层目录；* 单层内任意字符；? 单个字符。纯路径 glob 额外匹配
@@ -42,7 +43,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { BashRule } from "./bash-match.ts";
 import { bindingKey } from "./role-config.ts";
-import { judgeToolCall, SAFE_TOOLS } from "./wiring/tool-call/judge.ts";
+import { judgeToolCall, RUNTIME_TOOLS, SAFE_TOOLS } from "./wiring/tool-call/judge.ts";
 import { annotateToolResult } from "./wiring/tool-result.ts";
 import { discoverResources, disposeOnShutdown, injectHandoffNotes } from "./wiring/misc.ts";
 import { wireAgentStart } from "./wiring/agent-start.ts";
@@ -113,8 +114,13 @@ export function activate(pi: ExtensionAPI, options: ActivateOptions = {}) {
 		// 否则早期的一次误判会在几十轮之后把任务判死。
 		//
 		// 求援通道不清零：它是报告，不是进展。否则每次试探之间插一句 contact_supervisor 就能
-		// 永远停在「警告」档，硬停判据直接失效。
-		if (verdict === undefined && !SAFE_TOOLS.includes(event.toolName)) {
+	// 求援通道不清零：它是报告，不是进展。否则每次试探之间插一句 contact_supervisor 就能
+	// 永远停在「警告」档，硬停判据直接失效。
+	//
+	// RUNTIME_TOOLS（todo）同样不清零，理由同源：它是会话自身的簿记，不是任务进展。
+	// 若放行的 todo 也归零，子代理就能在两次拒之间插一句 todo 把连续计数洗掉，
+	// 永远到不了硬停 —— 与求援通道被排除在归零之外是同一个道理。
+	if (verdict === undefined && !SAFE_TOOLS.includes(event.toolName) && !RUNTIME_TOOLS.includes(event.toolName)) {
 			w.denyCounter.reset();
 			w.writeDenyCounter.reset();
 		}

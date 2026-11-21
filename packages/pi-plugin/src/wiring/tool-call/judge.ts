@@ -28,7 +28,10 @@ import { bail, deny, pathToolVerdict, preview, writeBail } from "./paths.ts";
  * 3. SAFE_TOOLS（求援通道）最先放行，不受任何停机影响；
  * 4. 已停机的会话挡住其后的一切（terminate）；
  * 5. 探针边界先于本工具的判定；
- * 6. bash → 其他执行器 → 路径类工具 → allowTools → 其余一律拒（fail closed）。
+ * 6. RUNTIME_TOOLS（todo 这类会话运行时工具）在停机闸门与探针边界之后放行：
+ *    活着的会话永远有它，停机的会话一个也没有；排在探针边界之后，纯 todo
+ *    空转的会话仍会被探针判据停掉；
+ * 7. bash → 其他执行器 → 路径类工具 → allowTools → 其余一律拒（fail closed）。
  */
 
 /**
@@ -67,6 +70,17 @@ const EXEC_TOOLS = ["bash", "powershell", "codemode"];
  * 停机判据本来就要它立刻上报，封锁它只会把信息憋在死掉的会话里。
  */
 export const SAFE_TOOLS = ["structured_output", "contact_supervisor", "intercom"];
+
+/**
+ * 会话级运行时工具：不碰文件系统、不与外界通信，只维护会话自己的任务清单。
+ * 与 SAFE_TOOLS 的差别有两条，都是刻意的：
+ * - 判定位置在停机闸门**之后**（SAFE_TOOLS 在之前）：停机的会话不该再改任何东西，
+ *   任务清单也不例外；
+ * - 不豁免 index.ts 的计数归零：放行的 todo 不得清空拒绝预算，否则子代理可以在
+ *   两次拒之间插一句 todo 把连续计数洗掉，永远到不了硬停 —— 与求援通道被排除在
+ *   归零之外是同一个道理，所以这里开第三个名单而不是往 SAFE_TOOLS 里加一员。
+ */
+export const RUNTIME_TOOLS = ["todo"];
 
 /**
  * 命令里是否有**未加引号**的 shell 控制字符。
@@ -379,6 +393,10 @@ export const judgeToolCall = async ({
 		return { block: true, reason: boundary.reason, terminate: false };
 	}
 
+	// 会话运行时工具（todo）：不碰文件，活着的会话照常放行。位置在停机闸门与探针
+	// 边界**之后**：停机后不再放行（停了的会话不该再改任何东西，任务清单也不例外），
+	// 探针判据对纯 todo 空转的会话也照常生效。
+	if (RUNTIME_TOOLS.includes(event.toolName)) return undefined;
 	// 拒绝分三类，分类标准只有一条：**父代理放宽授权能不能解决**。
 	//   能 → 撞权限计数（bail）：范围外路径、命令不在白名单、read 预算、
 	//         工具不在 allowTools、整个 bash 被关。这些是「授权与任务不匹配」的信号。
@@ -541,7 +559,7 @@ export const judgeToolCall = async ({
 		return pathToolVerdict(w, event as { toolName: string; input?: unknown }, cwd, kind, sessionFile);
 	}
 
-	// SAFE_TOOLS 已经在最前面处理过，这里只管调用方显式放行的工具。
+	// SAFE_TOOLS 与 RUNTIME_TOOLS 已经在前面处理过，这里只管调用方显式放行的工具。
 	if (w.policy.allowTools.includes(event.toolName)) return undefined;
 
 	return bail(
