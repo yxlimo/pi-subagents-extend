@@ -20,6 +20,7 @@ import {
 	listedJoin,
 	MAX_LISTED,
 	parseBashRule,
+	pathCandidates,
 	requiresNetwork,
 	shellTokens,
 } from "../../src/bash-match.ts"
@@ -403,4 +404,43 @@ import {
 	console.log("  ok   listedJoin adds the truncation note above the cap")
 }
 
+// 43. 粘值旗标的候选是 `=` 后面的路径本身，不是整段 `--flag=...`：
+//     交给路径判定的必须是命令真正会打开的那个字符串。
+{
+	assert.deepEqual(
+		pathCandidates("rg --file=/home/other/patterns.txt"),
+		["/home/other/patterns.txt"],
+		"the glued value is the candidate, not the whole flag",
+	)
+	assert.deepEqual(pathCandidates("rg --output=/tmp/x"), ["/tmp/x"], "an in-scope glued value is a candidate too")
+	console.log("  ok   pathCandidates yields the bare path from a glued = value")
+}
+
+// 44. 值不是路径的粘值旗标不产候选：没有斜杠的被斜杠判据挡掉，
+//     glob 与动态值被跳过表挡掉 —— 不认旗标名，判据自己就能分辨。
+{
+	assert.deepEqual(pathCandidates("rg --color=always"), [], "a bare value has no slash")
+	assert.deepEqual(pathCandidates("rg --max-count=2"), [], "a numeric value has no slash")
+	assert.deepEqual(pathCandidates("rg --glob=*.ts"), [], "a glob value is in the skip set")
+	assert.deepEqual(pathCandidates("rg --file=$DIR/patterns"), [], "a dynamic value is in the skip set")
+	assert.deepEqual(pathCandidates("rg --file=@scope/pkg"), [], "a package-spec value keeps the head skip")
+	console.log("  ok   pathCandidates drops glued values that are not paths")
+}
+
+// 45. 粘值写法与分开写法给出同一批候选：这是这条修复真正要守的不变量 ——
+//     同一个路径换个拼写，判定不该一边拦一边放。
+{
+	for (const [flag, value] of [
+		["--file", "/home/other/patterns.txt"],
+		["--output", "/tmp/x"],
+		["--include", "src/index.ts"],
+	] as const) {
+		assert.deepEqual(
+			pathCandidates(`rg ${flag}=${value}`),
+			pathCandidates(`rg ${flag} ${value}`),
+			`${flag} yields the same candidates glued or split`,
+		)
+	}
+	console.log("  ok   pathCandidates judges a glued flag the same as its split form")
+}
 console.log("\nbash unit tests passed")

@@ -103,7 +103,11 @@ export function pathCandidates(command: string): string[] {
 	const out: string[] = [];
 	const words = shellTokens(command);
 	for (let i = 0; i < words.length; i += 1) {
-		const token = words[i] as string;
+		const word = words[i] as string;
+		// 粘值写法（`--file=/a/b`）要判的是 `=` 后面的路径，不是整段旗标：
+		// 整段以 `-` 开头会被 SKIP_HEADS 丢掉，路径就永远进不了判定。
+		// 不认旗标名，只按第一个 `=` 切；斜杠、字符集、跳过表这些判据自己能分辨值是不是路径。
+		const token = word.startsWith("-") && word.includes("=") ? word.slice(word.indexOf("=") + 1) : word;
 		// 程序位是路径形态时跳过：它是要执行的工具，不是这条命令的参数。
 		if (i === 0 && token.includes("/")) continue;
 		if (out.length >= MAX_PATH_CANDIDATES) break;

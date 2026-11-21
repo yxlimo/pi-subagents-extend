@@ -9,16 +9,17 @@
 
 import assert from "node:assert/strict"
 import { execFileSync } from "node:child_process"
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs"
-import { dirname, join } from "node:path"
-import { fileURLToPath } from "node:url"
+import { existsSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs"
+import { join } from "node:path"
 import { dependencyGateVerdict } from "../../src/dependencies.ts"
 import { sandboxWritableDirs } from "../../src/sandbox/grants.ts"
 import { buildSpec, scratchDir } from "../../src/sandbox/spec.ts"
+import { stateDir } from "../state-dir.ts"
 
-const here = dirname(fileURLToPath(import.meta.url))
-const packageRoot = join(here, "..")
-const root = realpathSync.native(mkdtempSync(join(packageRoot, ".unit-sandbox-")))
+// 单元测试不导入 harness（那会牵起 helper 解析与扩展加载），所以这里直接用 state-dir 的
+// 约定而不是 harness 的再导出：沙箱里落在工作树根的 .test-state（角色授权覆盖它），本地则回退
+// 到包目录下被 gitignore 的 .test-*。
+const root = realpathSync.native(stateDir(".unit-sandbox-"))
 
 // grants 会往 stateDir 写工具链缓存，spec 会写 git-excludes：钉进临时树里，
 // 不碰真实 ~/.cache。
