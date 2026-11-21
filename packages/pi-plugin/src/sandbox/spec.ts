@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, s
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import type { BashRule } from "../bash-match.ts";
-import { CONVENTIONAL_TMP, dropHiddenGrants, expandPath, findWorktreeRoot } from "../paths.ts";
+import { CONVENTIONAL_TMP, dropHiddenGrants, expandPath, findWorktreeRoot, privatisedDirs, resolveComparable } from "../paths.ts";
 import type { Policy } from "../policy.ts";
 import { reportHiddenGrants, sandboxWritableDirs, SANDBOX_DEVICE_PATHS, stateDir, toolchainCacheDir } from "./grants.ts";
 
@@ -92,6 +92,57 @@ export function scratchDir(cwd: string, rule: BashRule): string {
 }
 
 /**
+ * 已提示过的「解析后的工作树落进私有化目录」：一次会话只提示一遍，不反复打扰。
+ */
+const reportedPrivatisedCwd = new Set<string>();
+
+/**
+ * 词法路径 → realpath，两侧共用 paths.ts 的 resolveComparable（与 dropHiddenGrants
+ * 同一把尺子），不在这里再发明一种比较。
+ */
+function privatisedRootHolding(cwd: string, rule: BashRule): string | undefined {
+	const resolved = resolveComparable(cwd);
+	return privatisedDirs(cwd, scratchDir(cwd, rule))
+		.map(resolveComparable)
+		.find((dir) => resolved === dir || resolved.startsWith(`${dir}/`));
+}
+
+/**
+ * 解析后的工作树是否落进一个**仍会被私有 tmpfs 盖住**的目录（含恰好等于它）。
+ *
+ * helper 对词法上含 cwd 的目录不挂 tmpfs（namespace.rs 的 should_private_tmp），所以
+ * cwd 直写 /tmp/pi93-fix 这类形状是安全的，树照常可见 —— 这个谓词对它必须保持沉默，
+ * 否则每棵健康的 /tmp worktree 都会被误报。真正无法工作的是另一种形状：cwd 的字面
+ * 路径不含那个目录、realpath 却落进去（典型是经一个前导软链）。此时挂载把工作树整个
+ * 盖掉，写授权也会被剔光（dropHiddenGrants 两侧都按 realpath 比较），症状读起来像
+ * 一场权限故障。
+ *
+ * 目录集合只用 spec 已经算出来的那两个来源：scratchDir（spec 的 `tmp`）与
+ * privatisedDirs（helper 的 privatised_dirs 镜像），没有第二个「临时目录」的定义。
+ */
+export function cwdInsidePrivatisedTmp(cwd: string, rule: BashRule): boolean {
+	return privatisedRootHolding(cwd, rule) !== undefined;
+}
+
+/**
+ * 把「工作树解析后落进私有化目录」告诉父代理一次。
+ *
+ * 只提示不拒：这层判断不出宿主上挂载是否真的成立（挂载失败时 helper 静默退回宿主
+ * 目录，命令照样能跑），拒了会把还能跑的会话掐死；但这个形状一旦碰上真挂载，就是
+ * 「每条写授权被剔、git 看到空目录」，值得点名出路而不是让子代理去猜。
+ */
+export function reportCwdInsidePrivatisedTmp(cwd: string, rule: BashRule, warn?: (message: string) => void): void {
+	const root = privatisedRootHolding(cwd, rule);
+	if (!root) return;
+	const resolved = resolveComparable(cwd);
+	if (reportedPrivatisedCwd.has(resolved)) return;
+	reportedPrivatisedCwd.add(resolved);
+	warn?.(
+		`pi-subagents-extend: the working tree resolves into a directory that gets a private tmpfs: ${cwd} resolves to ${resolved}, which is inside ${root}; the write grants beneath it are dropped and the spec may be refused outright. Put the worktree under the home directory or inside the repository instead of under the temp dir.`,
+	);
+}
+
+/**
  * 沙箱 spec：每个会话写一次，所有 bash 调用复用。
  *
  * helper 只认绝对路径，这里给的都是 resolve 过的；路径不存在时 helper 会直接拒绝，
@@ -115,6 +166,9 @@ export function buildSpec(cwd: string, rule: BashRule, policy: Policy, warn?: (m
 		scratch,
 	);
 	reportHiddenGrants(dropped, warn);
+	// cwd 解析进仍会被私有化的目录时点名：那是挂载与整棵工作树互相抵消的形状，与上面的
+	// 「授权被剔」同源但更致命，且同样只该提示一次。
+	reportCwdInsidePrivatisedTmp(cwd, rule, warn);
 	return {
 		cwd,
 		read: ["/"],

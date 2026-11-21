@@ -8,11 +8,11 @@
 //   node test/extension.test.ts
 
 import assert from "node:assert/strict"
-import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { spawnSync } from "node:child_process"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { handler, specOf, repo, stateDir } from "./harness.ts"
+import { handler, specOf, repo, stateDir, workdir } from "./harness.ts"
 
 
 // The suite must not write into the developer's real home. Spec files, `git-excludes` and the
@@ -467,4 +467,66 @@ function requiresNetworkOf(command: string): string | null {
 	assert.match(String(denied?.reason), /`curl` would hang here/, "the hang warning names curl")
 	h.restore()
 	console.log("  ok   curl 的查询旗标放行，真实 URL 仍按网络拒")
+}
+
+// 170. cwd 经前导软链解析进仍会被私有化的目录：提示一次，点名经过的路径、解析后的
+//      路径、私有化根与出路。helper 对词法上含 cwd 的目录不挂 tmpfs（should_private_tmp），
+//      所以「cwd 直写临时目录之下」是安全的、不许告警；只有这种 realpath 落进去的形状
+//      才会让挂载与整棵工作树互相抵消 —— 每条写授权被剔、git 看到空目录，读起来像权限故障。
+{
+	const root = stateDir("tmp-root-")
+	const wt = join(root, "wt")
+	mkdirSync(wt, { recursive: true })
+	const link = join(workdir, "wt-link")
+	rmSync(link, { force: true })
+	symlinkSync(wt, link)
+	const h = await handler({
+		cwd: link,
+		bindings: JSON.stringify({
+			"pi-subagents-extend/1": {
+				scope: ["."],
+				bash: { read: ["git status"], env: { TMPDIR: root } },
+			},
+		}),
+	})
+	await h.call("bash", { command: "git status" })
+	const notice = h.ui.find((message) => /resolves into a directory that gets a private tmpfs/.test(message))
+	assert.ok(notice, "a cwd that resolves into the privatised root warns once")
+	assert.ok(notice?.includes(link), "the warning names the path that came through the link")
+	assert.ok(notice?.includes(wt), "the warning names the resolved path")
+	assert.ok(notice?.includes(root), "the warning names the privatised root")
+	assert.match(notice ?? "", /home directory or inside the repository/, "the warning names the remedy")
+	// 一次会话只提示一遍：第二条命令不得把同一条告警再说一次。
+	await h.call("bash", { command: "git status" })
+	assert.equal(
+		h.ui.filter((message) => /resolves into a directory that gets a private tmpfs/.test(message)).length,
+		1,
+		"the warning is one-shot per session",
+	)
+	h.restore()
+	rmSync(link, { force: true })
+	rmSync(root, { recursive: true, force: true })
+	console.log("  ok   cwd 经软链解析进私有化目录时提示一次，点名路径与出路")
+}
+
+// 171. 词法上就在临时目录之下的 cwd 必须保持沉默：helper 对含 cwd 的目录不挂 tmpfs
+//      （should_private_tmp），树照常可见、授权照常有效 —— 每棵健康的 /tmp worktree
+//      都是这个形状。这条反例钉住「不误报」：这个警告的价值全在它罕见而真。
+{
+	const plain = mkdtempSync(join(tmpdir(), "pi-subagents-extend-plain-"))
+	const h = await handler({
+		cwd: plain,
+		bindings: JSON.stringify({
+			"pi-subagents-extend/1": { scope: ["."], bash: { read: ["git status"] } },
+		}),
+	})
+	await h.call("bash", { command: "git status" })
+	assert.equal(
+		h.ui.find((message) => /resolves into a directory that gets a private tmpfs/.test(message)),
+		undefined,
+		"a plain cwd under the temp dir must not warn: the helper deliberately skips the mount when the cwd is lexically inside the dir (should_private_tmp), so the tree stays visible and this session is healthy",
+	)
+	h.restore()
+	rmSync(plain, { recursive: true, force: true })
+	console.log("  ok   词法在临时目录之下的 cwd 不告警（helper 刻意不挂，树仍可见）")
 }
