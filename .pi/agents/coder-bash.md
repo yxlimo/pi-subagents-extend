@@ -49,6 +49,7 @@ extend:
         - echo
         - node
         - npx
+        - mise run test:bash
         - mise run test:unit
         - mise run typecheck
       deny:

@@ -129,6 +129,80 @@ for (const file of readdirSync(dir).filter((name) => name.endsWith(".md")).sort(
 	}
 }
 
+// A role md that tells the subagent to run a gate it is not allowed to run is worse than no gate
+// at all: the child spends calls on the refusal and the contradiction reads like a sandbox bug.
+// Both halves live in the same file, so the file can be checked against itself. Only the fenced
+// blocks count — those are the gates — because prose legitimately names commands the role is not
+// supposed to run (a neighbour md says which task covers a suite that runs elsewhere).
+const MISE_TOML = "mise.toml";
+let knownTasks = null;
+try {
+	const toml = readFileSync(MISE_TOML, "utf8");
+	const names = [...toml.matchAll(/^\[tasks\.(?:"([^"]+)"|([A-Za-z0-9:_-]+))\]/gm)].map(
+		(match) => match[1] ?? match[2],
+	);
+	const aliases = [...toml.matchAll(/^alias\s*=\s*\[(.*)\]/gm)].flatMap((match) =>
+		[...match[1].matchAll(/"([^"]+)"/g)].map((alias) => alias[1]),
+	);
+	knownTasks = new Set([...names, ...aliases]);
+} catch {
+	// No task table in this checkout: the allowlist half still runs, the existence half is skipped.
+}
+
+// The allow list is hand-written YAML with comments between entries. Matching "the first run of
+// `- ` lines" stops at the first comment and drops everything after it — when this check was first
+// written that reported two working gates as refused. Read by indentation to the end of the block.
+function allowEntries(text) {
+	const lines = text.split("\n");
+	const start = lines.findIndex((line) => /^[ \t]*allow:[ \t]*$/.test(line));
+	if (start === -1) return null;
+	const indent = lines[start].search(/\S/);
+	const entries = [];
+	for (const line of lines.slice(start + 1)) {
+		if (!line.trim()) continue;
+		if (line.search(/\S/) <= indent) break;
+		const item = line.match(/^[ \t]*-[ \t]+(.*)$/);
+		if (item) entries.push(item[1].trim());
+	}
+	return entries;
+}
+
+// The evaluator treats an entry beginning `re:` as a pattern, so a literal comparison here would
+// report every command covered by a pattern as refused.
+function allows(entries, command) {
+	return entries.some((entry) => {
+		if (entry === command) return true;
+		const pattern = entry.match(/^re:(.*)$/);
+		if (!pattern) return false;
+		try {
+			return new RegExp(pattern[1]).test(command);
+		} catch {
+			return false;
+		}
+	});
+}
+
+for (const file of readdirSync(dir).filter((name) => name.endsWith(".md")).sort()) {
+	const path = join(dir, file);
+	const text = readFileSync(path, "utf8");
+	const entries = allowEntries(text);
+	if (!entries) continue;
+	const gates = [...text.matchAll(/```[\s\S]*?```/g)].flatMap((fence) =>
+		[...fence[0].matchAll(/mise run ([A-Za-z0-9:_-]+)/g)].map((match) => match[1]),
+	);
+	const unique = [...new Set(gates)];
+	const refused = unique.filter((task) => !allows(entries, `mise run ${task}`));
+	const unknown = knownTasks ? unique.filter((task) => !knownTasks.has(task)) : [];
+	if (refused.length > 0) {
+		problems.push(
+			`${path}: the gate names ${refused.map((task) => `mise run ${task}`).join(", ")} but bash.allow does not — the role would refuse its own acceptance command`,
+		);
+	}
+	if (unknown.length > 0) {
+		problems.push(`${path}: the gate names unknown mise task(s) ${unknown.join(", ")}`);
+	}
+}
+
 
 for (const line of report) console.log(line);
 

@@ -48,7 +48,7 @@ extend:
         - echo
         - node
         - npx
-        - mise run test:handler
+        - mise run test:wiring
         - mise run typecheck
       deny:
         - git commit
@@ -76,7 +76,7 @@ configuration into model-visible text.
 ## Your gate
 
 ```
-mise run test:handler
+mise run test:wiring
 ```
 
 It must print **91** cases and exit 0. The suites are grouped under `test/wiring/`, so the

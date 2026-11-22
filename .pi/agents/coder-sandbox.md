@@ -44,7 +44,7 @@ extend:
         - node
         - npx
         - mise run test:sandbox
-        - mise run test:handler
+        - mise run test:wiring
         - mise run typecheck
       deny:
         - git commit
