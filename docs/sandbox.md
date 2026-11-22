@@ -176,6 +176,23 @@ the namespaces were set up, and the resolver directories are shadowed. It would 
 pair were ever added to that namespace, which is a design convention rather than something the
 code can enforce.
 
+### The notice appears once per session
+
+A successful offline command prints one line on stderr naming the directories it shadowed, so a run
+that is genuinely isolated is distinguishable in the log from one that silently took a different
+path. It used to print on **every** command, which meant a fifty-command session put fifty identical
+lines into the model's context — a fact the reader already had, paid for fifty times.
+
+Now the first offline command of a session announces it and the rest stay quiet. The plugin passes
+`PI_SUBAGENTS_EXTEND_QUIET_NETWORK_NOTICE=1` on its own helper invocation — never on the user's
+command, which is byte-identical either way — and the session flips that flag only when the spec is
+offline, so a session that opens with online commands still gets its first offline command
+announced.
+
+Silence here carries no risk of hiding a degradation: the fallback path above still speaks on
+**every** occasion. Quiet on success, loud when something is wrong is what keeps the signal while
+dropping the repetition.
+
 ## When the host refuses namespaces
 
 Some hosts create the user namespace and then refuse `setgroups`, mount, network and PID. Measured
