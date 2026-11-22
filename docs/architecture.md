@@ -31,7 +31,7 @@ before it — no module imports `index.ts`, which is what keeps the layers one-w
 | Module | What it owns |
 | --- | --- |
 | `wiring/context.ts` | the session state and the three functions that mutate it (`stop`, `armProbe`, `applyRoleBaseline` — which merges the role md with the dispatch payload) |
-| `bash-match.ts` | the barrel every caller imports: allow-list rules, merge semantics, the single command matcher |
+| `bash/index.ts` | the barrel every caller imports: allow-list rules, merge semantics, the single command matcher |
 | `bash/tokens.ts` | quote-aware tokenizing, command segments, path candidates |
 | `bash/env.ts` | leading environment assignments; refuses a `PATH`/`IFS`/`LD_PRELOAD` redefinition |
 | `bash/programs.ts` | the read/write program tables, wrapper peeling, package-manager subcommand rules |

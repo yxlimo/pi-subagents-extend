@@ -401,7 +401,7 @@ const childRun = async (opts: { cwd: string; home: string; systemPrompt: string;
 
 // The internal read/write judgment is not exported from the extension entry, so suites reach the
 // module directly. Shared: three of the five split session-start files classify commands.
-const bashApi = (await import(join(repo, "src", "bash-match.ts"))) as unknown as typeof import("../src/bash-match.ts")
+const bashApi = (await import(join(repo, "src", "bash/index.ts"))) as unknown as typeof import("../src/bash/index.ts")
 
 // The role-md parser, reached the same way: the split session-start files assert on
 // policyFromBlock / bindingKey directly, so the import lives here once instead of once per file.

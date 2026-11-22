@@ -1,8 +1,8 @@
 import { resolve } from "node:path";
 import { nodeModulesWriteHint } from "../agent-start.ts";
 import type { Wiring } from "../context.ts";
-import { matches, underAny } from "../../policy.ts";
-import { isRootish } from "../../paths.ts";
+import { matches, underAny } from "../../policy/index.ts";
+import { isRootish } from "../../paths/index.ts";
 import { anchorTargetPath, ANCHOR_ARGS, TRANSFER_DEST_ARGS, TRANSFER_SOURCE_ARGS } from "./anchor.ts";
 
 /**

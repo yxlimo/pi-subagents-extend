@@ -17,7 +17,7 @@ import { join } from "node:path"
 import { handler, repo } from "../harness.ts"
 
 // pathCandidates 的纯抽取用例已随 paths.test.ts 拆走；判定用例与接线用例共用这一个导入。
-const bashMatch = (await import(join(repo, "src", "bash-match.ts"))) as unknown as {
+const bashMatch = (await import(join(repo, "src", "bash/index.ts"))) as unknown as {
   unreachableEntries?: (entries: string[], cwd: string) => UnreachableEntry[]
 }
 

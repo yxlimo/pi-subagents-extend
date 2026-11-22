@@ -13,8 +13,8 @@
  * - 判据与理由文本必须一致：manifest 按工具自己的规矩**向上**找（cwd 的祖先也算，
  *   两条链都查：字面路径与真实路径），所以 `why` 写的是 "in <cwd> or its ancestors"。
  *
- * 从 bash-match.ts 拆出来的诊断层：只判文件系统上能确定的事实。
- * bash-match.ts 仍是唯一入口，这里的东西由它转出口。
+ * 从 bash/index.ts 拆出来的诊断层：只判文件系统上能确定的事实。
+ * bash/index.ts 仍是唯一入口，这里的东西由它转出口。
  */
 
 import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";

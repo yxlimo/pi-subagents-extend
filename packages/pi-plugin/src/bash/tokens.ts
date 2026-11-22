@@ -1,8 +1,8 @@
 /**
  * bash 命令的切词与路径候选抽取。
  *
- * 从 bash-match.ts 拆出来的纯函数层：只做文本处理，不做授权判断。
- * bash-match.ts 仍是唯一入口，这里的东西由它转出口。
+ * 从 bash/index.ts 拆出来的纯函数层：只做文本处理，不做授权判断。
+ * bash/index.ts 仍是唯一入口，这里的东西由它转出口。
  */
 
 export const RE_PREFIX = "re:";

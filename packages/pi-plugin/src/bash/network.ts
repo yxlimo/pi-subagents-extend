@@ -1,9 +1,9 @@
 /**
  * 离线沙箱里「一跑就挂」的网络命令判定。
  *
- * 从 bash-match.ts 拆出来的网络层：裸 netns 是丢包而不是拒连，这一类命令要在 spawn
+ * 从 bash/index.ts 拆出来的网络层：裸 netns 是丢包而不是拒连，这一类命令要在 spawn
  * 之前拒掉。判据看剥掉前置赋值、包装器与路径前缀后的第一个 token。
- * bash-match.ts 仍是唯一入口，requiresNetwork 由它转出口。
+ * bash/index.ts 仍是唯一入口，requiresNetwork 由它转出口。
  */
 
 import { basename } from "node:path";

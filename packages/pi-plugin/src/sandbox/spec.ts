@@ -6,9 +6,9 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import type { BashRule } from "../bash-match.ts";
-import { CONVENTIONAL_TMP, dropHiddenGrants, expandPath, findWorktreeRoot, privatisedDirs, resolveComparable } from "../paths.ts";
-import type { Policy } from "../policy.ts";
+import type { BashRule } from "../bash/index.ts";
+import { CONVENTIONAL_TMP, dropHiddenGrants, expandPath, findWorktreeRoot, privatisedDirs, resolveComparable } from "../paths/index.ts";
+import type { Policy } from "../policy/index.ts";
 import { reportHiddenGrants, sandboxWritableDirs, SANDBOX_DEVICE_PATHS, stateDir, toolchainCacheDir } from "./grants.ts";
 
 /** 沙箱里 git 用的全局排除规则：依赖目录不进索引。 */

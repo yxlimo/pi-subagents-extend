@@ -2,15 +2,15 @@ import type { ExtensionAPI, ExtensionContext, ToolCallEvent, ToolCallEventResult
 import { homedir } from "node:os";
 import { readFileSync } from "node:fs";
 import { parse } from "yaml";
-import { allEntries, classifyCommand, commandAccess, commandMatches, deniedEntry, deniedEnvAssignment, pathCandidates, requiresNetwork, type BashRule } from "../../bash-match.ts";
+import { allEntries, classifyCommand, commandAccess, commandMatches, deniedEntry, deniedEnvAssignment, pathCandidates, requiresNetwork, type BashRule } from "../../bash/index.ts";
 import { dispatchToolFaceRefusal, headEntriesHint, warnUnresolvedAgentName, warnUntrackedWorktreeProfile } from "../../notices.ts";
 import { STOP_NOTICE } from "../../probe.ts";
 import { shouldDefaultWorktree, WORKTREE_TOOLS } from "../../worktree-default.ts";
 import { agentMdDirs, BINDING_NAMESPACE, bindingKey, readExtendBlock, resolveAgentFile, worktreeFromBlock } from "../../role-config.ts";
-import { asObject, matches, type Policy } from "../../policy.ts";
+import { asObject, matches, type Policy } from "../../policy/index.ts";
 import { dependencyGateVerdict } from "../../dependencies.ts";
-import { expandPath, privatisedDirs, resolveComparable, underRoot } from "../../paths.ts";
-import { buildSpec, detectPnpmStore, describeHelper, dropSpecFile, helperPath, SANDBOX_DEVICE_PATHS, scratchDir, wrapInSandbox, writeSpecFile } from "../../sandbox.ts";
+import { expandPath, privatisedDirs, resolveComparable, underRoot } from "../../paths/index.ts";
+import { buildSpec, detectPnpmStore, describeHelper, dropSpecFile, helperPath, SANDBOX_DEVICE_PATHS, scratchDir, wrapInSandbox, writeSpecFile } from "../../sandbox/index.ts";
 import type { Wiring } from "../context.ts";
 import { bail, deny, pathToolVerdict, preview, writeBail } from "./paths.ts";
 
@@ -135,7 +135,7 @@ export function hasUnquotedShellControl(command: string): boolean {
  * 不判「能不能读」，只在插件层把参数里的路径引到任务范围上 —— 引导，不是墙。
  *
  * 刻意**不**含 /nix/store、/usr、/bin、/sbin、/lib、/lib64：工具住在这些目录里，不代表命令的参数
- * 会包含它们 —— 程序位由 bash 经 PATH 解析，根本不进参数表（见 bash-match 的 `pathCandidates`）。
+ * 会包含它们 —— 程序位由 bash 经 PATH 解析，根本不进参数表（见 bash/index.ts 的 `pathCandidates`）。
  * 参数里真的出现 store 或系统二进制目录，就是子代理在工具链里翻东西，正是要把路径引回范围的场景
  * （实测：一个子代理在 258MB 的包体里 rg 了 140 次，全部为空）。
  */
@@ -176,7 +176,7 @@ function bashPathArgAllowed(token: string, cwd: string, rule: BashRule, policy: 
  * 只读类命令里第一个指向范围之外的路径参数；没有就返回 undefined。
  *
  * 只看读类命令：写类命令的文件面由 Landlock 与写范围管，而这里判的是「它在读什么」。候选的抽取
- * 在 bash-match 里（纯字符串），放行判定留在这里，因为豁免集、scratch 与 `resolveComparable` 都在这边。
+ * 在 bash/index.ts 里（纯字符串），放行判定留在这里，因为豁免集、scratch 与 `resolveComparable` 都在这边。
  */
 function foreignBashPath(command: string, cwd: string, rule: BashRule, policy: Policy): string | undefined {
 	return pathCandidates(command).find((token) => !bashPathArgAllowed(token, cwd, rule, policy));

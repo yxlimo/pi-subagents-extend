@@ -41,7 +41,7 @@
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import type { BashRule } from "./bash-match.ts";
+import type { BashRule } from "./bash/index.ts";
 import { bindingKey } from "./role-config.ts";
 import { judgeToolCall, RUNTIME_TOOLS, SAFE_TOOLS } from "./wiring/tool-call/judge.ts";
 import { annotateToolResult } from "./wiring/tool-result.ts";
@@ -49,10 +49,10 @@ import { discoverResources, disposeOnShutdown, injectHandoffNotes } from "./wiri
 import { wireAgentStart } from "./wiring/agent-start.ts";
 import { wireSessionStart } from "./wiring/session-start.ts";
 import { createWiring, type ActivateOptions } from "./wiring/context.ts";
-import { bashBlocker, describePnpmStore, helperPath, sandboxWritableDirs } from "./sandbox.ts";
-export { dropHiddenGrants, findWorktreeRoot, privatisedDirs, resolveComparable } from "./paths.ts";
+import { bashBlocker, describePnpmStore, helperPath, sandboxWritableDirs } from "./sandbox/index.ts";
+export { dropHiddenGrants, findWorktreeRoot, privatisedDirs, resolveComparable } from "./paths/index.ts";
 export { dependencyScope, sortedEntries, sortByName } from "./dependencies.ts";
-export { buildSpec, detectPnpmStore, describeHelper, helperCandidates, sandboxWritableDirs, wrapInSandbox, type HelperCapabilities } from "./sandbox.ts";
+export { buildSpec, detectPnpmStore, describeHelper, helperCandidates, sandboxWritableDirs, wrapInSandbox, type HelperCapabilities } from "./sandbox/index.ts";
 export { nodeModulesWriteHint, wireDeliverable, wirePreExec, wireWorktree } from "./wiring/agent-start.ts";
 export { hasUnquotedShellControl } from "./wiring/tool-call/judge.ts";
 

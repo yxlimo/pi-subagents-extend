@@ -106,7 +106,7 @@ if (described?.landlock?.supported) {
 }
 
 // 156 起：离线网络拒绝。判定函数放在共用层，拒绝点放在 bash 判定链里，两处分开钉。
-const networkMatcher = (await import(join(repo, "src", "bash-match.ts"))) as unknown as {
+const networkMatcher = (await import(join(repo, "src", "bash/index.ts"))) as unknown as {
 	requiresNetwork?: (command: string) => string | null
 }
 function requiresNetworkOf(command: string): string | null {

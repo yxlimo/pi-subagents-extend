@@ -1,6 +1,6 @@
 import type { ToolResultEvent, ToolResultEventResult } from "@earendil-works/pi-coding-agent";
 import { rmSync } from "node:fs";
-import { classifyCommand, isUnknownProgram } from "../bash-match.ts";
+import { classifyCommand, isUnknownProgram } from "../bash/index.ts";
 import { handoffHintFor, withHint } from "../handoff-hint.ts";
 import { unreachableCommandNote } from "../notices.ts";
 import { cpuStallNote, networkFailureNote, writeRefusalNote } from "../sandbox-note.ts";

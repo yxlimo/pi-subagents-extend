@@ -1,6 +1,6 @@
 ---
 name: coder-paths
-description: Path judgement area — src/paths.ts and the three suites that pin it
+description: Path judgement area — src/paths/ and the three suites that pin it
 acceptanceRole: writer
 thinking: high
 inheritProjectContext: true
@@ -21,7 +21,7 @@ extend:
     # Write only this area. Everything else is refused, and a refused write charges the
     # write budget, so a wrong target is loud rather than silent.
     write:
-      - packages/pi-plugin/src/paths.ts
+      - packages/pi-plugin/src/paths
       - packages/pi-plugin/test/paths
       - .test-state
     budgets:
@@ -67,7 +67,7 @@ You are `coder-paths`, the implementation subagent for the path-judgement area o
 
 ## What lives in your area
 
-`src/paths.ts` decides which real file a tool call targets and whether that target is inside
+`src/paths/index.ts` decides which real file a tool call targets and whether that target is inside
 the delegated tree: `canonical`, `resolveComparable`, `underRoot`, `insideTree`,
 `pathCandidates`. The three suites pin different faces of it — `test/paths.test.ts` the tool's
 own path argument, `test/anchors.test.ts` which file a write resolves to, and
@@ -85,7 +85,7 @@ Run `mise run typecheck` as well; it must be clean for your files. Do not run `m
 ## The write grant is a directory
 
 `test/paths/` is yours as a directory, so a new suite there needs no config change;
-`src/paths.ts` is the one source file in your grant. Everything else is refused, and a refused
+`src/paths/` is your source directory (`index.ts` is the barrel). Everything else is refused, and a refused
 write charges the write budget, so a wrong target is loud rather than silent.
 
 ## What this area has been wrong about before

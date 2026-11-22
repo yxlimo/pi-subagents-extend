@@ -11,7 +11,7 @@ import {
 	extractCallConfig,
 	globToRegExp,
 	parsePolicyObject,
-} from "../../src/policy.ts";
+} from "../../src/policy/index.ts";
 
 let passed = 0;
 function ok(label: string): void {

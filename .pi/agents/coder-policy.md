@@ -14,7 +14,6 @@ extend:
     scope: ["."]
     write:
       - packages/pi-plugin/src/policy
-      - packages/pi-plugin/src/policy.ts
       - packages/pi-plugin/test/policy
       - packages/pi-plugin/test/unit/policy.unit.test.ts
       - .test-state
@@ -66,7 +65,7 @@ You are `coder-policy`, the implementation subagent for the policy area of
 `payload.ts` reads a dispatch payload and refuses what it does not recognise. There is no merge
 module any more — the base layer (the role md) and its overlay (the payload) are combined field by
 field in `applyRoleBaseline` (`src/wiring/context.ts`), with `bash.deny` unioned as a hard floor.
-`src/policy.ts` is a barrel.
+`src/policy/index.ts` is a barrel.
 
 ## Your gate
 
@@ -81,7 +80,7 @@ semantics at function level; run it when you touch `payload.ts` or `glob.ts`. Do
 ## The write grant is a directory
 
 `src/policy/` and `test/policy/` are yours as directories: a new file inside either needs no
-config change. `src/policy.ts` (the barrel) and `test/unit/policy.unit.test.ts` sit outside
+config change. `test/unit/policy.unit.test.ts` sits outside
 those directories and are named in the grant too.
 
 ## What this area has been wrong about before

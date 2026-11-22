@@ -212,7 +212,7 @@ What bites, in the order it bit here:
   policy stays inactive — **fail open**, not fail closed. A role md whose body is empty can never
   be identified.
 - **`write` entries are relative to the session cwd, which is the worktree root.** Write
-  `packages/pi-plugin/src/paths.ts`, never `src/paths.ts`: the short spelling matches nothing, so
+  `packages/pi-plugin/src/paths`, never `src/paths`: the short spelling matches nothing, so
   *every* write is refused and it reads exactly like the area boundary working correctly.
 - **The grant is an exact file list.** A new file is refused even inside the area. Grant a directory
   (e.g. `packages/pi-plugin/test`) for areas that legitimately add files.

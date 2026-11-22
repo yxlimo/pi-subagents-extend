@@ -7,7 +7,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
 import { relative, resolve } from "node:path";
-import { allEntries, classifyCommand, commandNeedsNoManifest, firstToken, leadingAssignments, listedJoin, MAX_LISTED, unreachableEntries, type BashRule, type UnreachableEntry } from "./bash-match.ts";
+import { allEntries, classifyCommand, commandNeedsNoManifest, firstToken, leadingAssignments, listedJoin, MAX_LISTED, unreachableEntries, type BashRule, type UnreachableEntry } from "./bash/index.ts";
 import { mainRepoRoot } from "./deliverable.ts";
 
 /** 旧一代 bindings 文件的位置（相对会话 cwd），仅用于兼容层提示。 */

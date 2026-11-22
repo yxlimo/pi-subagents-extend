@@ -23,7 +23,7 @@ import {
 	pathCandidates,
 	requiresNetwork,
 	shellTokens,
-} from "../../src/bash-match.ts"
+} from "../../src/bash/index.ts"
 
 // 1. 引号里的空格不是分隔符：切词要按 bash 的引号语义走。
 //    `git -c k="a b c" reset --hard` 被朴素切词读成 `reset` 之前的 `b`，

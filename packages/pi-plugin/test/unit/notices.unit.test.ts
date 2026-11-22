@@ -14,7 +14,7 @@
 //   node test/unit/notices.unit.test.ts
 
 import assert from "node:assert/strict"
-import { parseBashRule } from "../../src/bash-match.ts"
+import { parseBashRule } from "../../src/bash/index.ts"
 import { headEntriesHint } from "../../src/notices.ts"
 
 const cwd = process.cwd()

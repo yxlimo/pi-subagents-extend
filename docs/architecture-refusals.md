@@ -300,7 +300,7 @@ that cannot start working. Both apply **only when the command actually failed** 
 contained such a string and came back carrying "this is outside the writes the parent granted".
 
 `bash.network` off, `requiresNetwork` in `src/bash/network.ts` names a fixed list of programs and subcommands that only make sense with a round
-`bash-match.ts` names a fixed list of programs and subcommands that only make sense with a round
+`bash/index.ts` names a fixed list of programs and subcommands that only make sense with a round
 trip: `curl`, `wget`, the netcat family, `telnet`, `ssh`/`scp`/`sftp`, the DNS and host-reachability
 probes, `gh`, `docker pull|push|login`, `npm|pnpm|yarn publish`, and `git clone|fetch|pull|push|ls-remote`
 plus `git remote update` and `git submodule update --remote`. The check runs after the allowlist and

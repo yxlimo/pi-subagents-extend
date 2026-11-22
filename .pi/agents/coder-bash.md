@@ -21,7 +21,6 @@ extend:
     scope: ["."]
     write:
       - packages/pi-plugin/src/bash
-      - packages/pi-plugin/src/bash-match.ts
       - packages/pi-plugin/test/bash
       - packages/pi-plugin/test/unit/bash.unit.test.ts
       - .test-state
@@ -72,7 +71,7 @@ You are `coder-bash`, the implementation subagent for the bash-command judgement
 `src/bash/` decides what a command *is*: `tokens.ts` splits a command line the way a shell
 does, `env.ts` peels leading assignments, `network.ts` recognises commands that need the
 network, `programs.ts` holds the read/write table, `rules.ts` matches allow entries, and
-`unreachable.ts` reports allowlist entries that can never match. `src/bash-match.ts` is a
+`unreachable.ts` reports allowlist entries that can never match. `src/bash/index.ts` is a
 barrel — it should stay one.
 
 ## Your gate
@@ -90,7 +89,7 @@ area's problem.
 ## The write grant is a directory
 
 `src/bash/` and `test/bash/` are yours as directories: a new file inside either needs no config
-change. `src/bash-match.ts` (the barrel) and `test/unit/bash.unit.test.ts` sit outside those
+change. Only `test/unit/bash.unit.test.ts` sits outside the area directories — everything else
 directories and are named in the grant too. Everything else is refused, and a refused write
 charges the write budget, so a wrong target is loud rather than silent.
 

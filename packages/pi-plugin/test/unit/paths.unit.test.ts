@@ -8,7 +8,7 @@ import { mkdirSync, realpathSync, rmSync, symlinkSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import { stateDir } from "../state-dir.ts"
-import { dropHiddenGrants, expandPath, privatisedDirs, resolveComparable, underRoot } from "../../src/paths.ts"
+import { dropHiddenGrants, expandPath, privatisedDirs, resolveComparable, underRoot } from "../../src/paths/index.ts"
 
 const root = realpathSync.native(stateDir(".unit-paths-"))
 

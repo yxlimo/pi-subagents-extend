@@ -1,7 +1,7 @@
 import { DenyCounter } from "../budgets.ts";
 import { bindingKey, type RolePolicy } from "../role-config.ts";
-import { BINDINGS_ENV, asObject, denyAll, extractCallConfig, parsePolicyObject, type Policy } from "../policy.ts";
-import { stringList } from "../bash-match.ts";
+import { BINDINGS_ENV, asObject, denyAll, extractCallConfig, parsePolicyObject, type Policy } from "../policy/index.ts";
+import { stringList } from "../bash/index.ts";
 import { Probe, parseProbeConfig } from "../probe.ts";
 
 /** activate() 的接线选项。profile 层已移除，目前没有字段；新选项按需加在这里。 */

@@ -255,7 +255,7 @@ import { handler, repo, workdir } from "../harness.ts"
 	const notices = (await import(join(repo, "src", "notices.ts"))) as unknown as {
 		headEntriesHint: (rule: unknown, command: string, cwd: string) => string
 	}
-	const match = (await import(join(repo, "src", "bash-match.ts"))) as unknown as {
+	const match = (await import(join(repo, "src", "bash/index.ts"))) as unknown as {
 		parseBashRule: (raw: unknown) => unknown
 	}
 	const rule = match.parseBashRule({ read: ["mise run typecheck", "re:^mise run test:(paths|policy)$"] })

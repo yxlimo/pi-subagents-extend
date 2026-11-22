@@ -11,10 +11,10 @@
  * 读写归类供探针使用：legacy 的 read / write 列按列定读写（两侧都命中以 write 为准，
  * 保守方向）；新的 allow 单列用 commandAccess 从命令本身判读写，read / write 留作兼容列。
  *
- * 从 bash-match.ts 拆出来的规则层：白名单三列的匹配、归类与 bash 配置的解析。
+ * 从 bash/index.ts 拆出来的规则层：白名单三列的匹配、归类与 bash 配置的解析。
  * 两层接线（角色 md 基线逐字段补进派单载荷、bash.deny 并集作硬底线）在
  * wiring/context.ts 的 applyRoleBaseline。
- * bash-match.ts 仍是唯一入口，这里的东西由它转出口。
+ * bash/index.ts 仍是唯一入口，这里的东西由它转出口。
  */
 
 import { leadingAssignments } from "./env.ts";

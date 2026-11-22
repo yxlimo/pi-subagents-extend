@@ -14,7 +14,6 @@ extend:
     scope: ["."]
     write:
       - packages/pi-plugin/src/sandbox
-      - packages/pi-plugin/src/sandbox.ts
       - packages/pi-plugin/src/sandbox-note.ts
       - packages/pi-plugin/src/dependencies.ts
       - packages/pi-plugin/test/sandbox
@@ -86,7 +85,7 @@ inspects a computed grant list does not prove the kernel agrees. When you change
 ## The write grant is a directory
 
 `src/sandbox/` and `test/sandbox/` are yours as directories: a new file inside either needs no
-config change. `src/sandbox.ts` (the barrel), `src/sandbox-note.ts` and `src/dependencies.ts`
+config change. `src/sandbox-note.ts` and `src/dependencies.ts`
 sit outside those directories and are named in the grant too.
 
 ## What this area has been wrong about before

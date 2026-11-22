@@ -5,10 +5,10 @@
  * 这里只转出口；调用方一律从本文件 import。
  */
 
-export { deniedEnvAssignment, leadingAssignments, type LeadingAssignments } from "./bash/env.ts";
-export { commandAccess, isUnknownProgram } from "./bash/programs.ts";
-export { requiresNetwork } from "./bash/network.ts";
-export { commandSegments, pathCandidates, shellTokens, tokens } from "./bash/tokens.ts";
+export { deniedEnvAssignment, leadingAssignments, type LeadingAssignments } from "./env.ts";
+export { commandAccess, isUnknownProgram } from "./programs.ts";
+export { requiresNetwork } from "./network.ts";
+export { commandSegments, pathCandidates, shellTokens, tokens } from "./tokens.ts";
 export {
 	allEntries,
 	classifyCommand,
@@ -23,5 +23,5 @@ export {
 	type BashMatch,
 	type BashRule,
 	type UnreachableEntry,
-} from "./bash/rules.ts";
-export { commandNeedsNoManifest, unreachableEntries } from "./bash/unreachable.ts";
+} from "./rules.ts";
+export { commandNeedsNoManifest, unreachableEntries } from "./unreachable.ts";

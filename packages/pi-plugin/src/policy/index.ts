@@ -2,7 +2,7 @@
  * POLICY / PARSE 层：把派单载荷与角色 md 基线解析成 `Policy`。两层的合并不在这里：
  * wiring/context.ts 的 applyRoleBaseline 逐字段把基线补进载荷缺失的字段，
  * bash.deny 取并集作硬底线。实现按主题住在 `policy/` 下的两个模块里，本文件只做
- * 桶装再导出，调用方的 `from "./policy.ts"` 全部原样可用，行为不变。
+ * 桶装再导出，调用方的 `from "./index.ts"` 全部原样可用，行为不变。
  * - `policy/payload.ts`：读派单载荷交给我们的配置对象（键白名单、fail closed）。
  * - `policy/glob.ts`：glob 编译与范围比对原语，以及共享类型 `Policy` / `ToolDeclaration`。
  */
@@ -22,7 +22,7 @@ export {
 	positiveInt,
 	unknownNamespaceKeysError,
 	unknownPayloadKeysError,
-} from "./policy/payload.ts";
+} from "./payload.ts";
 
 
 export {
@@ -31,6 +31,6 @@ export {
 	matches,
 	normalizeGlob,
 	underAny,
-} from "./policy/glob.ts";
+} from "./glob.ts";
 
-export type { Policy, ToolDeclaration } from "./policy/glob.ts";
+export type { Policy, ToolDeclaration } from "./glob.ts";

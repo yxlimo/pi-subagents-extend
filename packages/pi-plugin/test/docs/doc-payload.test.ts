@@ -12,7 +12,7 @@ const src = (name: string): string => pathToFileURL(join(here, "..", "..", "src"
 // extractCallConfig 没有导出，所以用环境变量走完整 reader：激活后用 /permission 看它解析出的策略。
 const { activate } = (await import(src("index.ts"))) as unknown as ExtensionModule;
 // 权限键集合从 reader 自己导出，不在测试里抄一份：reader 增删键时这里跟着动。
-const { POLICY_CONFIG_KEYS, PAYLOAD_IGNORED_KEYS } = (await import(src("policy.ts"))) as unknown as {
+const { POLICY_CONFIG_KEYS, PAYLOAD_IGNORED_KEYS } = (await import(src("policy/index.ts"))) as unknown as {
   POLICY_CONFIG_KEYS: readonly string[];
   PAYLOAD_IGNORED_KEYS: readonly string[];
 };

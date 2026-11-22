@@ -11,10 +11,10 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, realpathSync, type Dirent } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
-import type { BashRule } from "../bash-match.ts";
+import type { BashRule } from "../bash/index.ts";
 import { DETECT_SKIP, detectScratchDirs } from "../dependencies.ts";
-import { canonical, expandPath, insideTree } from "../paths.ts";
-import { globToRegExp, normalizeGlob, type Policy } from "../policy.ts";
+import { canonical, expandPath, insideTree } from "../paths/index.ts";
+import { globToRegExp, normalizeGlob, type Policy } from "../policy/index.ts";
 
 /**
  * linked worktree 的 git 公共目录（主仓的 .git）。只有 .git 是文件（worktree）时才问 git，

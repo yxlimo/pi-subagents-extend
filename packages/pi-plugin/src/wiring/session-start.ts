@@ -1,7 +1,7 @@
 import type { ExtensionContext, SessionStartEvent } from "@earendil-works/pi-coding-agent";
 import { reportUnreachableEntries, reportedUntrackedWorktreeProfiles, warnCompatLayer, warnLegacyBashColumns, warnedLegacyBashColumns } from "../notices.ts";
 import { bindingKey } from "../role-config.ts";
-import { bashBlocker, detectPnpmStore, helperPath, reportedHiddenGrants } from "../sandbox.ts";
+import { bashBlocker, detectPnpmStore, helperPath, reportedHiddenGrants } from "../sandbox/index.ts";
 import type { ActivateOptions, Wiring } from "./context.ts";
 
 /**

@@ -1,7 +1,7 @@
 import type { ContextEvent, ContextEventResult, ResourcesDiscoverResult } from "@earendil-works/pi-coding-agent";
 import { fileURLToPath } from "node:url";
 import { handoffHintFor, withHint } from "../handoff-hint.ts";
-import { sweepStaleSpecFiles } from "../sandbox.ts";
+import { sweepStaleSpecFiles } from "../sandbox/index.ts";
 import type { Wiring } from "./context.ts";
 import { textOf } from "./tool-result.ts";
 

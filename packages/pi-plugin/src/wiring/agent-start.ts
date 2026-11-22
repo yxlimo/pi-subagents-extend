@@ -5,10 +5,10 @@ import { homedir } from "node:os";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { DenyCounter } from "../budgets.ts";
 import { deliverableTarget, ensureDeliverableLink, mainRepoRoot } from "../deliverable.ts";
-import { canonical } from "../paths.ts";
-import { denyAll } from "../policy.ts";
+import { canonical } from "../paths/index.ts";
+import { denyAll } from "../policy/index.ts";
 import { agentMdDirs, outputFromBlock, parseRoleName, policyFromBlock, readExtendBlock, resolveAgentFile, resolveRoleFromPrompt, setupFromBlock, worktreeFromBlock } from "../role-config.ts";
-import { setDeliverableTargetPath } from "../sandbox.ts";
+import { setDeliverableTargetPath } from "../sandbox/index.ts";
 import { dropSubagentOnlySkills } from "../main-skills.ts";
 import type { Wiring } from "./context.ts";
 

@@ -285,7 +285,7 @@ import { handler, specOf, fakeClock, defaultProbe, workdir, repo } from "../harn
 //     子树），扩展这一层只有三件事要负责：默认关、开启时把秒数写进 spec、被它杀掉时给模型
 //     一句「重试没用」的说明 —— 否则模型会把它当成偶发失败，原样再跑一遍。
 {
-  const { parseBashRule } = await import(join(repo, "src", "bash-match.ts"))
+  const { parseBashRule } = await import(join(repo, "src", "bash/index.ts"))
   assert.equal(parseBashRule({ read: ["pnpm test"] })?.cpuStallSeconds, false, "off unless asked for")
   assert.equal(parseBashRule({ read: ["pnpm test"], cpuStallSeconds: false })?.cpuStallSeconds, false, "explicit false stays off")
   assert.equal(parseBashRule({ read: ["pnpm test"], cpuStallSeconds: 0 })?.cpuStallSeconds, false, "0 means off, not kill at once")
@@ -413,7 +413,7 @@ import { handler, specOf, fakeClock, defaultProbe, workdir, repo } from "../harn
 //     的 deny_unknown_fields 会整份拒绝。「关掉时不写键」的兼容性就在这里被破坏。`true` 经
 //     Number() 会变成 1，即「静默 1 秒就杀整棵树」，而不是「开」。
 {
-  const { parseBashRule } = await import(join(repo, "src", "bash-match.ts"))
+  const { parseBashRule } = await import(join(repo, "src", "bash/index.ts"))
   assert.equal(parseBashRule({ read: ["x"], cpuStallSeconds: 0.5 })?.cpuStallSeconds, false, "a fraction below 1 is off, not 0")
   assert.equal(parseBashRule({ read: ["x"], cpuStallSeconds: true })?.cpuStallSeconds, false, "true is not a threshold")
   assert.equal(parseBashRule({ read: ["x"], cpuStallSeconds: "60" })?.cpuStallSeconds, false, "a string is not a number either")

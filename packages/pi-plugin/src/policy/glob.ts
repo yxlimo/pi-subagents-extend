@@ -4,8 +4,8 @@
  * 这一层是纯函数，不持有会话状态；policy.ts 只做桶装再导出。
  */
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import { type BashRule } from "../bash-match.ts";
-import { canonical } from "../paths.ts";
+import { type BashRule } from "../bash/index.ts";
+import { canonical } from "../paths/index.ts";
 
 /**
  * 一个工具的类别声明。

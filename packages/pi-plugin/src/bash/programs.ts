@@ -1,9 +1,9 @@
 /**
  * 程序的读写归类：直通包装器剥离、git / 包管理器的子命令定位、单程序的写判定。
  *
- * 从 bash-match.ts 拆出来的归类层：给 `allow` 列判读写。这里的表是白名单，
+ * 从 bash/index.ts 拆出来的归类层：给 `allow` 列判读写。这里的表是白名单，
  * 漏一个条目就是把会写的命令判成 read —— 条目逐条照搬，不做「清理」。
- * bash-match.ts 仍是唯一入口，这里的东西由它转出口。
+ * bash/index.ts 仍是唯一入口，这里的东西由它转出口。
  */
 
 import { basename } from "node:path";

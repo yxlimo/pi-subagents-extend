@@ -13,7 +13,7 @@ import { join, dirname } from "node:path"
 import { handler, workdir, repo } from "../harness.ts"
 
 // pathCandidates 的纯抽取用例（101–107、115）与接线用例（108–114）共用这一个导入。
-const bashMatch = (await import(join(repo, "src", "bash-match.ts"))) as unknown as {
+const bashMatch = (await import(join(repo, "src", "bash/index.ts"))) as unknown as {
   pathCandidates?: (command: string) => string[]
 }
 

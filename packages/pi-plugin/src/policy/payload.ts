@@ -6,10 +6,10 @@
  * 不持有会话状态；policy.ts 只做桶装再导出。
  */
 import { isAbsolute } from "node:path";
-import { parseBashRule } from "../bash-match.ts";
+import { parseBashRule } from "../bash/index.ts";
 import { DEFAULT_MAX_DENIES, DEFAULT_MAX_WRITE_DENIES } from "../budgets.ts";
 import { BINDING_NAMESPACE, bindingKey } from "../role-config.ts";
-import { canonical } from "../paths.ts";
+import { canonical } from "../paths/index.ts";
 import { compile, type Policy, type ToolDeclaration } from "./glob.ts";
 
 export const BINDINGS_ENV = "PI_SUBAGENT_EXTENSION_BINDINGS";
