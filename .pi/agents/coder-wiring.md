@@ -27,6 +27,8 @@ extend:
       - packages/pi-plugin/src/wiring/tool-result.ts
       - packages/pi-plugin/src/wiring/misc.ts
       - packages/pi-plugin/src/wiring/tool-call/judge.ts
+      - packages/pi-plugin/src/wiring/tool-call/bash-path.ts
+      - packages/pi-plugin/src/wiring/tool-call/dispatch-preflight.ts
       - packages/pi-plugin/test/extension.test.ts
       - packages/pi-plugin/test/budgets.test.ts
       - packages/pi-plugin/test/notices.test.ts
