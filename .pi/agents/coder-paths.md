@@ -22,9 +22,7 @@ extend:
     # write budget, so a wrong target is loud rather than silent.
     write:
       - packages/pi-plugin/src/paths.ts
-      - packages/pi-plugin/test/paths.test.ts
-      - packages/pi-plugin/test/anchors.test.ts
-      - packages/pi-plugin/test/bash-paths.test.ts
+      - packages/pi-plugin/test/paths
       - .test-state
     budgets:
       deny: 5
@@ -81,15 +79,14 @@ own path argument, `test/anchors.test.ts` which file a write resolves to, and
 mise run test:paths
 ```
 
-It must print **33** cases and exit 0. Run `mise run typecheck` as well; it must be clean for
-your files. Do not run `mise run test:all`.
+It must print **12** cases and exit 0 (`test/paths/` holds two suites: paths 6, anchors 6).
+Run `mise run typecheck` as well; it must be clean for your files. Do not run `mise run test:all`.
 
-## The write grant is an exact file list
+## The write grant is a directory
 
-Those four files are your whole write surface. A **new** file is not in the grant, even one
-under `test/` with a name of your own — the grant lists files, not directories. Extend the
-existing suites instead; if a task genuinely cannot be done without a new file, stop and say
-so rather than adding one and explaining afterwards.
+`test/paths/` is yours as a directory, so a new suite there needs no config change;
+`src/paths.ts` is the one source file in your grant. Everything else is refused, and a refused
+write charges the write budget, so a wrong target is loud rather than silent.
 
 ## What this area has been wrong about before
 

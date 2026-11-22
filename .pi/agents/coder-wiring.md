@@ -13,6 +13,7 @@ extend:
   permissions:
     scope: ["."]
     write:
+      - packages/pi-plugin/src/wiring
       - packages/pi-plugin/src/index.ts
       - packages/pi-plugin/src/budgets.ts
       - packages/pi-plugin/src/notices.ts
@@ -21,29 +22,7 @@ extend:
       - packages/pi-plugin/src/main-context.ts
       - packages/pi-plugin/src/child-context.ts
       - packages/pi-plugin/src/handoff-hint.ts
-      - packages/pi-plugin/src/wiring/context.ts
-      - packages/pi-plugin/src/wiring/agent-start.ts
-      - packages/pi-plugin/src/wiring/session-start.ts
-      - packages/pi-plugin/src/wiring/tool-result.ts
-      - packages/pi-plugin/src/wiring/misc.ts
-      - packages/pi-plugin/src/wiring/tool-call/judge.ts
-      - packages/pi-plugin/src/wiring/tool-call/bash-path.ts
-      - packages/pi-plugin/src/wiring/tool-call/dispatch-preflight.ts
-      - packages/pi-plugin/test/extension.test.ts
-      - packages/pi-plugin/test/budgets.test.ts
-      - packages/pi-plugin/test/notices.test.ts
-      - packages/pi-plugin/test/session-start.test.ts
-      - packages/pi-plugin/test/annotations.test.ts
-      - packages/pi-plugin/test/extension-dependencies.test.ts
-      - packages/pi-plugin/test/extension-commands.test.ts
-      - packages/pi-plugin/test/extension-judge.test.ts
-      - packages/pi-plugin/test/extension-grants.test.ts
-      - packages/pi-plugin/test/extension-artefacts.test.ts
-      - packages/pi-plugin/test/session-start-baseline.test.ts
-      - packages/pi-plugin/test/session-start-bash.test.ts
-      - packages/pi-plugin/test/session-start-wiring.test.ts
-      - packages/pi-plugin/test/session-start-payload.test.ts
-      - packages/pi-plugin/test/session-start-roles.test.ts
+      - packages/pi-plugin/test/wiring
       - .test-state
     budgets:
       deny: 5
@@ -100,15 +79,16 @@ configuration into model-visible text.
 mise run test:handler
 ```
 
-It must print **223** cases and exit 0. The suites were split by area in 2026-11, so the per-file
-numbers are extension 17, extension-grants 9, extension-artefacts 7, extension-dependencies 11,
-extension-commands 8, extension-judge 4, budgets 13, notices 13, notices-hints 11, session-start 28,
-session-start-baseline 22, session-start-bash 28, session-start-wiring 16, session-start-payload 9,
-session-start-roles 6, sandbox.real 14, annotations 7. Do not run `mise run test:all`.
+It must print **91** cases and exit 0. The suites are grouped under `test/wiring/`, so the
+per-file numbers are extension 17, extension-judge 13, budgets 13, notices 13, notices-hints 11,
+annotations 7, session-start-wiring 17. Do not run `mise run test:all`.
 
-## The write grant is an exact file list
+## The write grant is a directory
 
-Those twenty entries are your whole write surface; a new file is refused even inside the area.
+`src/wiring/` and `test/wiring/` are yours as directories: a new file inside either needs no
+config change. The handler-support modules that still sit at `src/` root (`index.ts`,
+`budgets.ts`, `notices.ts`, `probe.ts`, `context-scope.ts`, `main-context.ts`,
+`child-context.ts`, `handoff-hint.ts`) are named individually.
 
 ## What this area has been wrong about before
 

@@ -16,6 +16,7 @@ extend:
       - docs
       - README.md
       - packages/pi-plugin/skills
+      - packages/pi-plugin/test/docs
       - .test-state
     budgets:
       deny: 5
@@ -67,18 +68,19 @@ the same contract from three distances; keep them consistent with each other.
 mise run test:docs
 ```
 
-It must print `documented binding payloads: checked 9, refused 0` and
-`scanned <n> markdown files` with `<n>` at least 1 — the count varies with the checkout, so compare
-it against this run rather than against a number written here. Both numbers are the point: every
+It must print `reader checks: refused 0, …` (with `write-refused 0` and `legacy bash columns 0`)
+and `scanned <n> markdown files` with `<n>` at least 1 — the count varies with the checkout, so
+compare it against this run rather than against a number written here. Both numbers are the point: every
 fenced payload in the docs is
 fed to the real reader, so a payload the docs teach but the code rejects fails here. Do not
 run `mise run test:all`.
 
-## The write grant is an exact file list
+## The write grant is docs and its tests
 
-Those six entries are your whole write surface. Source and tests are read-only for you —
-when a documented payload is rejected, the answer is usually to fix the payload, and if the
-code really disagrees with the docs, say so instead of editing the code.
+`docs/`, `packages/pi-plugin/skills/` and `packages/pi-plugin/test/docs/` are yours as
+directories, plus `README.md`. Source is read-only for you: when a documented payload is
+rejected, the answer is usually to fix the payload, and if the code really disagrees with the
+docs, say so instead of editing the code.
 
 ## What this area has been wrong about before
 

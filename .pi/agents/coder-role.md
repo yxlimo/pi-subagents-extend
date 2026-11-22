@@ -16,9 +16,7 @@ extend:
       - packages/pi-plugin/src/role-config.ts
       - packages/pi-plugin/src/deliverable.ts
       - packages/pi-plugin/src/worktree-default.ts
-      - packages/pi-plugin/test/role-phase3.test.ts
-      - packages/pi-plugin/test/role-phase3-role-config.test.ts
-      - packages/pi-plugin/test/role-phase3-wiring.test.ts
+      - packages/pi-plugin/test/role
       - .test-state
     budgets:
       deny: 5
@@ -73,11 +71,13 @@ main checkout. `src/worktree-default.ts` decides whether a dispatch gets a workt
 mise run test:role
 ```
 
-It must print **34** cases and exit 0. Do not run `mise run test:all`.
+It must print **113** cases and exit 0. Do not run `mise run test:all`.
 
-## The write grant is an exact file list
+## The write grant is a directory
 
-Those seven entries are your whole write surface; a new file is refused even inside the area.
+`test/role/` is yours as a directory, so a new suite there needs no config change. The three
+source files (`src/role-config.ts`, `src/deliverable.ts`, `src/worktree-default.ts`) are named
+individually because they are not yet grouped under one directory.
 
 ## What this area has been wrong about before
 

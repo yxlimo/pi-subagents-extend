@@ -13,11 +13,9 @@ extend:
   permissions:
     scope: ["."]
     write:
-      - packages/pi-plugin/src/policy/glob.ts
-      - packages/pi-plugin/src/policy/payload.ts
+      - packages/pi-plugin/src/policy
       - packages/pi-plugin/src/policy.ts
-      - packages/pi-plugin/test/policy.test.ts
-      - packages/pi-plugin/test/policy-contract.test.ts
+      - packages/pi-plugin/test/policy
       - packages/pi-plugin/test/unit/policy.unit.test.ts
       - .test-state
     budgets:
@@ -76,15 +74,15 @@ field in `applyRoleBaseline` (`src/wiring/context.ts`), with `bash.deny` unioned
 mise run test:policy
 ```
 
-It must print **23** cases and exit 0 (it was 34 until the `mergeConfig` cases went with that
-module). `mise run test:unit` (61) covers the payload and glob semantics at function level; run it
-when you touch `payload.ts` or `glob.ts`. Do not run
+It must print **32** cases and exit 0. `mise run test:unit` (**100**) covers the payload and glob
+semantics at function level; run it when you touch `payload.ts` or `glob.ts`. Do not run
 `mise run test:all`.
 
-## The write grant is an exact file list
+## The write grant is a directory
 
-Those nine entries are your whole write surface; a new file is refused even inside the area.
-Extend the existing suites.
+`src/policy/` and `test/policy/` are yours as directories: a new file inside either needs no
+config change. `src/policy.ts` (the barrel) and `test/unit/policy.unit.test.ts` sit outside
+those directories and are named in the grant too.
 
 ## What this area has been wrong about before
 

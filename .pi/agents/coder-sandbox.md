@@ -13,14 +13,11 @@ extend:
   permissions:
     scope: ["."]
     write:
-      - packages/pi-plugin/src/sandbox/grants.ts
-      - packages/pi-plugin/src/sandbox/helper.ts
-      - packages/pi-plugin/src/sandbox/spec.ts
+      - packages/pi-plugin/src/sandbox
       - packages/pi-plugin/src/sandbox.ts
       - packages/pi-plugin/src/sandbox-note.ts
       - packages/pi-plugin/src/dependencies.ts
-      - packages/pi-plugin/test/sandbox.real.test.ts
-      - packages/pi-plugin/test/e2e-bash.test.ts
+      - packages/pi-plugin/test/sandbox
       - .test-state
     budgets:
       deny: 5
@@ -77,17 +74,20 @@ the binary. `src/dependencies.ts` is the pre-launch dependency gate, and
 mise run test:sandbox
 ```
 
-It must print **18** cases and exit 0: 14 in `sandbox.real.test.ts` (the helper really runs)
-and 4 in `e2e-bash.test.ts` (a real session, refused and allowed commands). Do not run
-`mise run test:all`.
+It must print **43** cases and exit 0: 16 in `sandbox.real.test.ts` (the helper really runs),
+11 in `extension-dependencies.test.ts`, 9 in `extension-grants.test.ts`, 7 in
+`extension-artefacts.test.ts`. `e2e-bash.test.ts` lives here too but runs under `mise run
+test:e2e` with the other real-session suites. Do not run `mise run test:all`.
 
 `test:sandbox` is the one gate that proves the sandbox by executing it; a case that only
 inspects a computed grant list does not prove the kernel agrees. When you change
 `grants.ts`, say what the real-session case showed.
 
-## The write grant is an exact file list
+## The write grant is a directory
 
-Those nine entries are your whole write surface; a new file is refused even inside the area.
+`src/sandbox/` and `test/sandbox/` are yours as directories: a new file inside either needs no
+config change. `src/sandbox.ts` (the barrel), `src/sandbox-note.ts` and `src/dependencies.ts`
+sit outside those directories and are named in the grant too.
 
 ## What this area has been wrong about before
 

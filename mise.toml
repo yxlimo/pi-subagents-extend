@@ -41,90 +41,92 @@ for f in packages/pi-plugin/test/unit/*.unit.test.ts; do node "$f" || exit 1; do
 [tasks."test:docs"]
 description = "Documented payloads, binding version consistency"
 run = """
-node packages/pi-plugin/test/doc-payload.test.ts &&
-node packages/pi-plugin/test/version-consistency.test.ts
+for f in packages/pi-plugin/test/docs/*.test.ts; do node "$f" || exit 1; done
 """
 [tasks."check:grants"]
 description = "Role md config — dead write grants and missing deny entries"
 run = "node scripts/check-role-grants.mjs"
 
 
-# --- 需要 helper 的区域 ---
+# --- 区域任务：一个区域一个目录，加文件不用改这里 ---
+#
+# 每个任务就是这个区域的目录。新增套件只要放进对应目录，任务自动收进去 —— 这是
+# 授权按目录给的同一套划分（角色 md 的 write 也是目录），所以「改哪块跑哪块」和
+# 「谁能改哪块」永远说同一件事。
+#
+# 长会话套件（e2e-*.test.ts）由 test:e2e 统一跑，区域任务跳过它们：派单时子代理
+# 跑的是区域快门槛，真会话留给父代理。
 
 [tasks."test:policy"]
 description = "Scope, glob, merge and payload contract — through the handler"
 depends = ["setup:helper"]
 run = """
-for f in packages/pi-plugin/test/policy*.test.ts; do node "$f" || exit 1; done
+for f in packages/pi-plugin/test/policy/*.test.ts; do node "$f" || exit 1; done
 """
 
 [tasks."test:paths"]
 description = "Path argument, anchors, bash path candidates"
 depends = ["setup:helper"]
 run = """
-for f in packages/pi-plugin/test/paths.test.ts \
-         packages/pi-plugin/test/anchors.test.ts \
-         packages/pi-plugin/test/bash-paths.test.ts; do node "$f" || exit 1; done
+for f in packages/pi-plugin/test/paths/*.test.ts; do node "$f" || exit 1; done
+"""
+
+[tasks."test:bash"]
+description = "Bash rule matching, command classification, path candidates"
+depends = ["setup:helper"]
+run = """
+for f in packages/pi-plugin/test/bash/*.test.ts; do
+  case "$f" in */e2e-*) continue ;; esac
+  node "$f" || exit 1
+done
 """
 
 [tasks."test:sandbox"]
-description = "The sandbox itself: grants, Landlock reality, and a real bash session"
+description = "The sandbox itself: grants, Landlock reality, dependency gate"
 depends = ["setup:helper"]
 run = """
-node packages/pi-plugin/test/sandbox.real.test.ts &&
-node packages/pi-plugin/test/e2e-bash.test.ts
+for f in packages/pi-plugin/test/sandbox/*.test.ts; do
+  case "$f" in */e2e-*) continue ;; esac
+  node "$f" || exit 1
+done
 """
 
-[tasks."test:handler"]
-description = "The tool_call / tool_result / session handlers: sandbox, budgets, notices, roles"
+[tasks."test:wiring"]
+description = "The tool_call / tool_result / session handlers: budgets, notices, annotations"
 depends = ["setup:helper"]
+alias = ["test:handler"]
 run = """
-for f in packages/pi-plugin/test/extension.test.ts \
-         packages/pi-plugin/test/budgets.test.ts \
-         packages/pi-plugin/test/notices.test.ts \
-         packages/pi-plugin/test/session-start.test.ts \
-         packages/pi-plugin/test/sandbox.real.test.ts \
-         packages/pi-plugin/test/annotations.test.ts \
-         packages/pi-plugin/test/notices-hints.test.ts \
-         packages/pi-plugin/test/session-start-roles.test.ts \
-         packages/pi-plugin/test/extension-grants.test.ts \
-         packages/pi-plugin/test/extension-artefacts.test.ts \
-         packages/pi-plugin/test/extension-dependencies.test.ts \
-         packages/pi-plugin/test/extension-commands.test.ts \
-         packages/pi-plugin/test/extension-judge.test.ts \
-         packages/pi-plugin/test/session-start-baseline.test.ts \
-         packages/pi-plugin/test/session-start-bash.test.ts \
-         packages/pi-plugin/test/main-skills.test.ts \
-         packages/pi-plugin/test/session-start-wiring.test.ts \
-         packages/pi-plugin/test/session-start-identity.test.ts \
-         packages/pi-plugin/test/session-start-payload.test.ts; do node "$f" || exit 1; done
+for f in packages/pi-plugin/test/wiring/*.test.ts; do
+  case "$f" in */e2e-*) continue ;; esac
+  node "$f" || exit 1
+done
 """
 
 [tasks."test:role"]
-description = "Deliverable module, extend blocks, and their wiring"
+description = "Role identity, extend blocks, deliverable, context isolation"
 depends = ["setup:helper"]
 run = """
-for f in packages/pi-plugin/test/role-phase3*.test.ts; do node "$f" || exit 1; done
+for f in packages/pi-plugin/test/role/*.test.ts; do
+  case "$f" in */e2e-*) continue ;; esac
+  node "$f" || exit 1
+done
 """
 
 [tasks."test:mock"]
-description = "Mock-LLM sessions and the dispatch-payload contract"
+description = "Mock-LLM engine and scripted sessions"
 depends = ["setup:helper"]
 run = """
-for f in packages/pi-plugin/test/context.test.ts \
-         packages/pi-plugin/test/mock-engine.test.ts \
-         packages/pi-plugin/test/mock-session.test.ts \
-         packages/pi-plugin/test/dispatch-payload.test.ts; do node "$f" || exit 1; done
+for f in packages/pi-plugin/test/mock-*.test.ts; do node "$f" || exit 1; done
 """
 
 [tasks."test:e2e"]
 description = "Real sessions: bash sandbox, budgets, guards, roles"
 depends = ["setup:helper"]
 run = """
-for f in packages/pi-plugin/test/e2e-bash.test.ts \
-         packages/pi-plugin/test/e2e-budgets.test.ts \
-         packages/pi-plugin/test/e2e-guards.test.ts \
-         packages/pi-plugin/test/e2e-role.test.ts; do node "$f" || exit 1; done
+for f in packages/pi-plugin/test/*/e2e-*.test.ts; do
+  [ -e "$f" ] || continue
+  node "$f" || exit 1
+done
 """
 
 # hashline-e2e 硬编码 ~/tmp 作为临时根（/tmp 被沙箱换成私有 tmpfs），
@@ -152,6 +154,8 @@ mise run test:unit &&
 mise run test:docs &&
 mise run test:policy &&
 mise run test:paths &&
+mise run test:bash &&
+mise run test:sandbox &&
 mise run test:role &&
 mise run test:mock &&
 mise run test:handler &&
