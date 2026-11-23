@@ -41,12 +41,21 @@ function spawnHarness(): { stdout: string; stderr: string; status: number | null
       "-e",
       // The harness resolves every path from its own import.meta.url, so the
       // child needs no cwd and no environment setup beyond an empty state var.
-      "import(require('url').pathToFileURL(process.argv[1]).href).then(() => console.log(process.env.PI_SUBAGENTS_EXTEND_STATE))",
+      // The marker matters: below Landlock ABI 7 the harness prints its own note about the stub
+      // helper on the way in, so the child's stdout is not one bare path. Parsing a marker line
+      // keeps the case about the scratch path instead of about how much the harness says.
+      "import(require('url').pathToFileURL(process.argv[1]).href).then(() => console.log('HARNESS_STATE=' + process.env.PI_SUBAGENTS_EXTEND_STATE))",
       harnessPath,
     ],
     { encoding: "utf8" },
   )
   return { stdout: run.stdout ?? "", stderr: run.stderr ?? "", status: run.status }
+}
+
+/** The scratch path the child reported, ignoring any other line it printed. */
+function stateOf(stdout: string): string {
+  const line = stdout.split("\n").find((entry) => entry.startsWith("HARNESS_STATE="))
+  return line ? line.slice("HARNESS_STATE=".length).trim() : ""
 }
 
 let passed = 0
@@ -70,7 +79,7 @@ for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
   // session setup this is where a Landlock denial would surface.
   mkdirSync(sharedState, { recursive: true })
   const run = spawnHarness()
-  const state = run.stdout.trim()
+  const state = stateOf(run.stdout)
   assert.equal(
     run.status,
     0,
@@ -90,7 +99,7 @@ for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
   if (ownedByUs) {
     rmSync(sharedState, { recursive: true, force: true })
     const run = spawnHarness()
-    const state = run.stdout.trim()
+    const state = stateOf(run.stdout)
     assert.equal(
       run.status,
       0,
@@ -101,7 +110,6 @@ for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
         state.startsWith(packageRoot + "\\.test-state-"),
       `expected the legacy package-local .test-state-* fallback, got ${state}`,
     )
-    console.log("  ok   harness falls back to the package-local .test-state-*")
     console.log("  ok   harness falls back to the package-local .test-state-*")
     passed++
   } else {
