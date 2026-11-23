@@ -21,16 +21,14 @@ directory; it defaults to `~/.cache/pi-subagents-extend`, and the tests point it
 rather than redirecting `HOME`, which would also move every toolchain's own state.
 Two subcommands matter: `--spec` runs a command, `--describe` prints the capabilities as JSON and
 exits 0, or 76 when the kernel is not good enough. `PI_SUBAGENTS_EXTEND_HELPER_PATH` overrides the
-binary path. `cargo build --release --manifest-path packages/helper/Cargo.toml` writes
-`packages/helper/target/release/pi-subagents-extend-helper`, which is what the tests execute;
-`pnpm run build:helper` additionally installs it as `packages/pi-plugin/bin/`, which is the path a
-loaded extension prefers and is gitignored. The two are kept apart on purpose: `bin/` belongs to
-the running extension, so a test run must not replace it.
-
-The extension resolves the binary in this order: `PI_SUBAGENTS_EXTEND_HELPER_PATH`, then
-`packages/pi-plugin/bin/`, then the cargo artifact under `packages/helper/target/release/`. The
-last one exists so that a source checkout with the helper built but not copied still runs — that
-state is easy to reach, and without it every `bash` call is refused.
+binary path; otherwise the extension uses `packages/pi-plugin/bin/pi-subagents-extend-helper-
+<platform>-<arch>` and nothing else. There is no cargo-artifact fallback: a published package has no
+build tree beside it, so a second candidate could only ever paper over a stale copy.
+`cargo build --release --manifest-path packages/helper/Cargo.toml` writes
+`packages/helper/target/release/pi-subagents-extend-helper`, which is what the tests execute — handed
+to them through that override; `pnpm run build:helper` (or `mise run setup:helper`) is what installs a
+build as `bin/`, which is gitignored and belongs to the running extension, so a test run must not
+replace it.
 
 When a session has `bash` enabled and no usable helper — the binary is missing, or the kernel is
 below ABI 7 — the extension says so once at session start, naming the command that fixes it, rather

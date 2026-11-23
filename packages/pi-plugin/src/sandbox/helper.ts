@@ -12,13 +12,6 @@ import { fileURLToPath } from "node:url";
 const HELPER_NAME = "pi-subagents-extend-helper";
 
 /**
- * 找 helper：环境变量优先，其次包装好的 bin/，最后仓内 cargo 产物。
- *
- * 第三个候选是给「源码 checkout + 软链加载」这种用法的：cargo 建好了但没跑
- * `pnpm run build:helper` 把产物拷进 bin/ 时，bash 不该整体失效 —— 这是改名后
- * 真实踩到的坑。npm 安装的副本没有 ../helper，那一条自然落空。
- */
-/**
  * helper 候选路径。纯函数，便于直接钉住候选及其顺序：环境变量不是候选，
  * 而是覆盖（设了但不存在就不往下找，否则「指错了」会静默用上另一个）。
  *
