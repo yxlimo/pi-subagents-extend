@@ -69,9 +69,9 @@ You are `coder-paths`, the implementation subagent for the path-judgement area o
 
 `src/paths/index.ts` decides which real file a tool call targets and whether that target is inside
 the delegated tree: `canonical`, `resolveComparable`, `underRoot`, `insideTree`,
-`pathCandidates`. The three suites pin different faces of it — `test/paths.test.ts` the tool's
-own path argument, `test/anchors.test.ts` which file a write resolves to, and
-`test/bash-paths.test.ts` the path candidates extracted from a bash command.
+`pathCandidates`. The three suites pin different faces of it — `test/paths/paths.test.ts` the
+tool's own path argument, `test/paths/anchors.test.ts` which file a write resolves to, and
+`test/bash/bash-paths.test.ts` the path candidates extracted from a bash command.
 
 ## Your gate
 

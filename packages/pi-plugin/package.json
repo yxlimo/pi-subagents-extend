@@ -34,7 +34,7 @@
     "build:helper": "cargo build --release --manifest-path ../helper/Cargo.toml --locked && mkdir -p bin && cp ../helper/target/release/pi-subagents-extend-helper bin/.helper.new && mv -f bin/.helper.new bin/pi-subagents-extend-helper",
     "pretest": "pnpm run build:helper:test",
     "build:helper:test": "cargo build --release --manifest-path ../helper/Cargo.toml --locked",
-    "test": "pnpm run lint && node test/extension.test.ts && node test/policy.test.ts && node test/policy-contract.test.ts && node test/paths.test.ts && node test/anchors.test.ts && node test/bash-paths.test.ts && node test/unit/paths.unit.test.ts && node test/unit/bash.unit.test.ts && node test/unit/policy.unit.test.ts && node test/role-phase3.test.ts && node test/role-phase3-role-config.test.ts && node test/role-phase3-wiring.test.ts && node test/context.test.ts && node test/mock-engine.test.ts && node test/mock-session.test.ts && node test/dispatch-payload.test.ts && node test/hashline-e2e.test.ts && node test/doc-payload.test.ts && node test/version-consistency.test.ts",
+    "test": "pnpm run lint && node ../../scripts/run-tests.mjs",
     "test:mock": "node test/mock-session.test.ts",
     "test:llm": "node test/e2e.test.ts",
     "test:policy": "node test/policy.test.ts",

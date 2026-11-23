@@ -129,12 +129,12 @@ executing; overwriting it fails with `ETXTBSY`, and the tests do not need it —
 helper from cargo's `target/release/` first. `mise run setup:helper` is the only thing that writes
 `bin/`, and the parent runs it deliberately.
 
-A single suite runs directly too — `node packages/pi-plugin/test/extension.test.ts` — and skips the type
+A single suite runs directly too — `node packages/pi-plugin/test/wiring/extension.test.ts` — and skips the type
 check.
 
 How to add a case:
 
-- Append a numbered case at the end of `packages/pi-plugin/test/extension.test.ts`, following the
+- Append a numbered case at the end of `packages/pi-plugin/test/wiring/extension.test.ts`, following the
   existing shape: a comment saying what defect it pins, then a block using `handler()`, `specOf()` and
   the types in `test/types.ts`.
 - Assert on the specific behaviour, not on a message that could drift. When the wording itself is the

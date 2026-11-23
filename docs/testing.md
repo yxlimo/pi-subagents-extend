@@ -1,23 +1,33 @@
 # Testing
-`pnpm test` runs eleven suites, all offline: no model, and no network beyond localhost.
+`pnpm test` runs every suite under `packages/pi-plugin/test`, all offline: no model, and no network
+beyond localhost. The list is not written down anywhere — `scripts/run-tests.mjs` walks the tree — so a
+suite that moves between areas still runs, and a new suite runs without anyone editing a script. (The
+list it replaced named test/policy.test.ts and friends for weeks after the suites moved, which broke
+`pnpm test` while every `mise run test:<area>` stayed green.)
 
-| Suite | Cases | What it is |
-| --- | --- | --- |
-| `test/extension.test.ts` | 213 | the extension's judgement through the handler, against a fake pi API |
-| `test/policy.test.ts` | 34 | the policy layer's own units: merge semantics, payload parsing, globs |
-| `test/paths.test.ts` | 33 | path judgement: the working tree versus the declared scope, quoted fragments, anchor ownership |
-| `test/role-phase3.test.ts` | 34 | the role-md layer's units: main-repo anchoring, deliverable links, the worktree/setup/output/policy blocks |
-| `test/context.test.ts` | 10 | the marker stripping and `.pi/main-only.md` injection |
-| `test/mock-engine.test.ts` | 8 | the mock LLM itself — fixture routing, validation, interpolation — over plain HTTP, no pi process |
-| `test/mock-session.test.ts` | 6 | a real pi process, driven by a scripted mock model |
-| `test/dispatch-payload.test.ts` | 2 | real pi sessions prove a dispatch payload constrains the child: a wrapped payload is enforced, a flat one is refused |
-| `test/hashline-e2e.test.ts` | 5 | a real pi process loading the real `pi-hashline-edit-pro` |
-| `test/doc-payload.test.ts` | 9 payloads | every bindings payload shown in a markdown file is still accepted by the reader |
-| `test/version-consistency.test.ts` | 12 files | the binding version hardcoded in every markdown file matches `role-config.ts` |
+| Suite | What it is |
+| --- | --- |
+| `test/wiring/extension.test.ts` | the extension's judgement through the handler, against a fake pi API |
+| `test/policy/policy.test.ts` | the policy layer's own units: merge semantics, payload parsing, globs |
+| `test/paths/paths.test.ts` | path judgement: the working tree versus the declared scope, quoted fragments, anchor ownership |
+| `test/role/role-phase3.test.ts` | the role-md layer's units: main-repo anchoring, deliverable links, the worktree/setup/output/policy blocks |
+| `test/role/context.test.ts` | the marker stripping and `.pi/main-only.md` injection |
+| `test/mock-engine.test.ts` | the mock LLM itself — fixture routing, validation, interpolation — over plain HTTP, no pi process |
+| `test/mock-session.test.ts` | a real pi process, driven by a scripted mock model |
+| `test/role/dispatch-payload.test.ts` | real pi sessions prove a dispatch payload constrains the child: a wrapped payload is enforced, a flat one is refused |
+| `test/hashline-e2e.test.ts` | a real pi process loading the real `pi-hashline-edit-pro` |
+| `test/docs/doc-payload.test.ts` | every bindings payload shown in a markdown file is still accepted by the reader |
+| `test/docs/version-consistency.test.ts` | the binding version hardcoded in every markdown file matches `role-config.ts` |
+| `test/docs/doc-paths.test.ts` | every `test/…test.ts` path a document names still exists |
+
+Case counts are deliberately not tabulated here: each suite prints its own, and the runner relays the
+last line of every suite's output, so a suite that suddenly runs zero cases shows up in the log next to
+its name instead of in a table nobody re-measures.
 
 Four more real-session suites run standalone (from the package directory) and are not wired
-into the `test` script: `node test/e2e-bash.test.ts`, `e2e-budgets.test.ts`, `e2e-role.test.ts`
-and `e2e-guards.test.ts`. `e2e-bash` (4 cases) walks the bash sandbox's boundaries, where the
+into `pnpm test`, whose runner skips every `e2e-*.test.ts`: `node test/sandbox/e2e-bash.test.ts`,
+`test/wiring/e2e-budgets.test.ts`, `test/role/e2e-role.test.ts` and `test/wiring/e2e-guards.test.ts`
+(`mise run test:e2e` runs all four). `e2e-bash` walks the bash sandbox's boundaries, where the
 verdict is what landed on disk; `e2e-budgets` (4) covers the `allowTools` gate and the two
 refusal budgets, one YAML fixture per case; `e2e-role` (3) drives a parent dispatch through the
 role-md layer — scope, deliverable, preExec; `e2e-guards` (4) covers the startup report, the
