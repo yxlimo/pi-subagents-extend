@@ -20,6 +20,57 @@ fi
 """
 sources = ["packages/helper/src/**/*.rs", "packages/helper/Cargo.toml"]
 
+# 一次打出 linux-x64 与 linux-arm64 两份 helper（npm 包里按
+# `<platform>-<arch>` 命名，安装后由 resolver 挑）。
+#
+# 为什么在容器里跑而不是本机交叉编译：发布出去的二进制必须**用发行版的标准
+# 解释器**（/lib64/ld-linux-*），并且 glibc 下限要与 CI 一致。NixOS 上用
+# pkgsCross 打出来的是 nix store 解释器（别人机器上跑不了），rustup 的
+# aarch64-gnu target 又缺 sysroot（链接时 -lc/-lm 全找不到）；musl 静态则
+# 编译不过（libc 的 ioctl 常量类型差异）。
+#
+# 镜像与 CI 的 runner 同族（ubuntu-24.04）+ 同一个 cross gcc，
+# 所以本地手动打的产物与 publish.yml 打出来的形态一致。
+#
+# 只有第一次手动发布需要它；之后由 .github/workflows/publish.yml 在 CI 里做。
+[tasks."build:helper:multiplatform"]
+description = "Build the helper for linux-x64 and linux-arm64 (containerized, matches CI)"
+run = """
+set -euo pipefail
+engine=$(command -v podman >/dev/null 2>&1 && echo podman || echo docker)
+"$engine" run --rm -v "$PWD":/w -w /w ubuntu:24.04 bash -euo pipefail -c '
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get -qq update >/dev/null
+  apt-get -qq install -y curl build-essential gcc-aarch64-linux-gnu ca-certificates >/dev/null
+  curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable >/dev/null 2>&1
+  . "$HOME/.cargo/env"
+  rustup target add aarch64-unknown-linux-gnu >/dev/null 2>&1
+  manifest=packages/helper/Cargo.toml
+  bin=packages/pi-plugin/bin
+  mkdir -p "$bin"
+  export CARGO_TARGET_DIR=/tmp/ct
+  cargo build --release --manifest-path "$manifest" --locked
+  cp /tmp/ct/release/pi-subagents-extend-helper "$bin/pi-subagents-extend-helper-linux-x64"
+  CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc \
+    cargo build --release --target aarch64-unknown-linux-gnu --manifest-path "$manifest" --locked
+  cp /tmp/ct/aarch64-unknown-linux-gnu/release/pi-subagents-extend-helper \
+     "$bin/pi-subagents-extend-helper-linux-arm64"
+'
+# 产物自检：架构对、解释器是发行版路径 —— 打错了要在这里红，而不是在用户机器上。
+for pair in x64:Advanced arm64:AArch64; do
+  arch=${pair#*:}; f=packages/pi-plugin/bin/pi-subagents-extend-helper-linux-${pair%%:*}
+  [ -x "$f" ] || { echo "missing $f" >&2; exit 1; }
+  got=$(readelf -h "$f" | awk "/Machine/{print \\$2}")
+  [ "$got" = "$arch" ] || { echo "$f is $got, expected $arch" >&2; exit 1; }
+done
+interp=$(readelf -p .interp packages/pi-plugin/bin/pi-subagents-extend-helper-linux-arm64 | sed -n "s/.*\\] *//p")
+case "$interp" in
+  /nix/store/*) echo "arm64 helper has a nix interpreter ($interp) — not publishable" >&2; exit 1 ;;
+esac
+echo "ok: $(ls -l packages/pi-plugin/bin/pi-subagents-extend-helper-linux-* | wc -l) binaries, arm64 interp=$interp"
+"""
+sources = ["packages/helper/src/**/*.rs", "packages/helper/Cargo.toml"]
+
 [tasks.lint]
 description = "ESLint the plugin"
 dir = "packages/pi-plugin"
