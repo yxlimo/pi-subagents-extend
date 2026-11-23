@@ -73,11 +73,34 @@ function permissionAllowColumn(rule: BashRule): string {
 
 
 
+/**
+ * 同一个会话里激活两次，只注册一次。
+ *
+ * 两份来源很容易同时存在：包装好了（ambient 加载），角色 md / agent frontmatter 又声明了一份
+ * 路径。后台子代理（单独进程）会把两份都加载进来，于是同一条命令被判两遍 —— 第一份把它包装成
+ * 沙箱调用，第二份看到的是包装后的字符串，拿去比对 bash.allow，永远匹配不上，整个子会话的 bash
+ * 全被拒。这不是某个用户的配置问题：只要「装了包」和「声明了路径」同时成立就会撞上。
+ *
+ * 闸门挂在 pi 传进来的 api 对象上：它是每个会话一份的，所以进程内的前台子代理（它不加载
+ * ambient，只加载声明的路径）照样会注册自己那一份，跨会话不会互相顶掉。
+ * Symbol.for 走全局符号表，两份是不同文件也能认同一个键。
+ */
+const ACTIVATION_MARK = Symbol.for("pi-subagents-extend.activation");
+
 export type { ActivateOptions } from "./wiring/context.ts";
 
 
 
 export function activate(pi: ExtensionAPI, options: ActivateOptions = {}) {
+	// 已在本会话注册过就退出：第二份 handler 会把第一份包装过的命令再判一遍（见 ACTIVATION_MARK）。
+	// 宿主若给了不可写的 api 对象，就按没有闸门继续 —— 少一层去重比整个扩展不激活好。
+	try {
+		const marked = pi as unknown as Record<symbol, unknown>;
+		if (marked[ACTIVATION_MARK]) return;
+		marked[ACTIVATION_MARK] = true;
+	} catch {
+		// 只读 api：退化成没有去重。
+	}
 	const w = createWiring();
 	// 绑定与方法约定（skill）一起提供给会话：扩展被加载，skill 就进系统提示的
 	// 可用列表；父代理据此知道委派时传 extensionBindings。已上锁的会话不注册——
