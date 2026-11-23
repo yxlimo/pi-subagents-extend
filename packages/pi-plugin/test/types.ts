@@ -87,8 +87,8 @@ export interface ExtensionModule {
 	sortByName<T extends { name: string }>(entries: T[]): T[]
 	/** 依赖闸门的扫描范围，暴露出来以便钉住 200 个目录的上限。 */
 	dependencyScope(cwd: string, ignored: string[]): string[]
-	/** helper 的候选路径，暴露出来以便钉住「仓内 cargo 产物也是候选」。 */
-	helperCandidates(here: string): string[]
+	/** helper 的候选路径，暴露出来以便钉住「打包的平台二进制优先、cargo 产物也是候选」。 */
+	helperCandidates(here: string, platform?: string, arch?: string): string[]
 	/** 路径归一，暴露出来以便钉住「与 helper 的 resolve_comparable 一致」。 */
 	resolveComparable(path: string): string
 }

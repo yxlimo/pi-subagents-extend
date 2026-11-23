@@ -31,17 +31,15 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "build": "tsc -p tsconfig.json",
-    "build:helper": "cargo build --release --manifest-path ../helper/Cargo.toml --locked && mkdir -p bin && cp ../helper/target/release/pi-subagents-extend-helper bin/.helper.new && mv -f bin/.helper.new bin/pi-subagents-extend-helper",
+    "build:helper": "cargo build --release --manifest-path ../helper/Cargo.toml --locked && mkdir -p bin && cp ../helper/target/release/pi-subagents-extend-helper bin/.helper.new && mv -f bin/.helper.new bin/pi-subagents-extend-helper && cp bin/pi-subagents-extend-helper bin/.helper.platform.new && mv -f bin/.helper.platform.new \"bin/pi-subagents-extend-helper-$(node -p 'process.platform + \"-\" + process.arch')\"",
     "pretest": "pnpm run build:helper:test",
     "build:helper:test": "cargo build --release --manifest-path ../helper/Cargo.toml --locked",
     "test": "pnpm run lint && node ../../scripts/run-tests.mjs",
     "test:mock": "node test/mock-session.test.ts",
     "test:llm": "node test/e2e.test.ts",
-    "test:policy": "node test/policy.test.ts",
-    "test:paths": "node test/paths.test.ts",
     "prepublishOnly": "pnpm run build",
-    "lint": "eslint .",
-    "test:hashline": "node test/hashline-e2e.test.ts"
+    "prepack": "cp -f ../../README.md ../../LICENSE .",
+    "lint": "eslint ."
   },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "^1.4.0",
@@ -57,7 +55,7 @@
   "files": [
     "src",
     "skills",
-    "bin"
+    "bin/pi-subagents-extend-helper-*"
   ],
   "dependencies": {
     "yaml": "^2.9.1"

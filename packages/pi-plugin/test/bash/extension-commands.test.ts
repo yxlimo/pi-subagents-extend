@@ -38,13 +38,29 @@ import { handler, specOf, specPathOf, workdir, stateDir, ext } from "../harness.
   if (real === undefined) delete process.env.PI_SUBAGENTS_EXTEND_HELPER
   else process.env.PI_SUBAGENTS_EXTEND_HELPER = real
 
-  // 候选顺序：包装好的 bin/ 优先，其次是仓内 cargo 产物 —— 后者正是「建好了但没拷」的兜底。
+  // 候选顺序：按平台命名的打包二进制 → 本地构建的通用名 → 仓内 cargo 产物。
+  // 第一条是 npm 安装后的唯一来源，后两条是源码 checkout 的开发兜底。
   const candidates = ext.helperCandidates("/x/packages/pi-plugin/src")
-  assert.equal(candidates[0], "/x/packages/pi-plugin/bin/pi-subagents-extend-helper")
+  assert.equal(
+    candidates[0],
+    "/x/packages/pi-plugin/bin/pi-subagents-extend-helper-linux-x64",
+    "the packaged platform binary is looked for first",
+  )
   assert.equal(
     candidates[1],
+    "/x/packages/pi-plugin/bin/pi-subagents-extend-helper",
+    "a locally built helper under the generic name still resolves",
+  )
+  assert.equal(
+    candidates[2],
     "/x/packages/helper/target/release/pi-subagents-extend-helper",
     "the cargo artifact is a runtime candidate",
+  )
+  // 平台是可传的，断言它真的参与了命名 —— 否则「arm64 上找不到」这类报告无从判断。
+  assert.equal(
+    ext.helperCandidates("/x/packages/pi-plugin/src", "linux", "arm64")[0],
+    "/x/packages/pi-plugin/bin/pi-subagents-extend-helper-linux-arm64",
+    "the platform argument names the packaged binary",
   )
   assert.ok(
     !candidates.some((c) => c.includes("subagent-permission")),

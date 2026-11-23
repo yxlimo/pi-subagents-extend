@@ -21,9 +21,20 @@ const HELPER_NAME = "pi-subagents-extend-helper";
 /**
  * helper 候选路径。纯函数，便于直接钉住候选及其顺序：环境变量不是候选，
  * 而是覆盖（设了但不存在就不往下找，否则「指错了」会静默用上另一个）。
+ *
+ * 第一名是**按平台命名**的二进制：npm 包只能带一份打包时构建的产物，
+ * 而 helper 是 Linux 特有的（Landlock + userns），所以发布时按
+ * `<name>-<platform>-<arch>` 命名，安装后的副本在自己的平台上找得到、
+ * 在别的平台上找不到也说得清。第二名是本地构建的通用名，第三名是源码
+ * checkout 里 cargo 的产物 —— npm 安装的副本没有 ../helper，那条自然落空。
  */
-export function helperCandidates(here: string): string[] {
+export function helperCandidates(
+	here: string,
+	platform: string = process.platform,
+	arch: string = process.arch,
+): string[] {
 	return [
+		resolve(here, "..", "bin", `${HELPER_NAME}-${platform}-${arch}`),
 		resolve(here, "..", "bin", HELPER_NAME),
 		resolve(here, "..", "..", "helper", "target", "release", HELPER_NAME),
 	];
@@ -46,7 +57,12 @@ export function helperPath(): string | undefined {
  */
 export function bashBlocker(helper: string | undefined): string | undefined {
 	if (!helper) {
-		return "no sandbox helper found, so every bash command will be refused. Run `pnpm run build:helper` in packages/pi-plugin, or set PI_SUBAGENTS_EXTEND_HELPER.";
+		const platform = `${process.platform}-${process.arch}`;
+		return (
+			`no sandbox helper found for ${platform}, so every bash command will be refused. ` +
+			`The package carries one as bin/${HELPER_NAME}-<platform>-<arch>; if yours is missing, ` +
+			"build one with `pnpm run build:helper` in packages/pi-plugin, or set PI_SUBAGENTS_EXTEND_HELPER."
+		);
 	}
 	const caps = describeHelper(helper);
 	if (!caps?.landlock.supported) {
