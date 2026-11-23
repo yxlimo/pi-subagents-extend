@@ -22,8 +22,9 @@ The package ships on npm with the sandbox helper prebuilt for linux-x64 and linu
 install needs neither Rust nor a network beyond npm:
 
 ```bash
-pi install npm:pi-subagents-extend@0.1.0    # the exact version is the pin
+pi install npm:pi-subagents-extend
 ```
+
 
 From a checkout instead (contributing, or a change you want to try before it ships):
 

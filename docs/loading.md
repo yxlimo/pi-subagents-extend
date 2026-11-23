@@ -44,12 +44,11 @@ quietly do nothing.
 The supported distribution is npm. No development symlink, in this repo or globally:
 
 ```bash
-pi install npm:pi-subagents-extend@0.1.0    # exact version: the pin is the version number
+pi install npm:pi-subagents-extend
 pi list                                     # what is configured
 ```
 
-`pi update --extensions` reconciles an unpinned range; an exact version stays where it is. To try the
-package for a single session without writing settings, `pi -e npm:pi-subagents-extend@0.1.0`.
+To try the package for a single session without writing settings, `pi -e npm:pi-subagents-extend`.
 
 ## What is in the package
 
