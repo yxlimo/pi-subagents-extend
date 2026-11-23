@@ -97,13 +97,34 @@ test("真的少一条时仍然报错，并点名缺的那条", () => {
 });
 
 // ---- loader 路径 ---------------------------------------------------------------
-test("subagentOnlyExtensions 指向不存在的文件 → 报错（fail-open 的根源）", () => {
-	const dir = withRoleDirs({ "coder.md": md({ write: "[.]", loader: "/nonexistent/profile-loader.ts" }) });
+test("subagentOnlyExtensions 指向仓库内已删除的文件 → 报错（fail-open 的根源）", () => {
+	const root = mkdtempSync(path.join(os.tmpdir(), "role-check-loader-"));
+	mkdirSync(path.join(root, ".pi", "agents"), { recursive: true });
+	mkdirSync(path.join(root, ".pi", "agent-profiles"));
+	const loader = path.join(root, ".pi", "agent-profiles", "md-role.ts");
+	writeFileSync(
+		path.join(root, ".pi", "agents", "coder.md"),
+		md({ write: "[.]", loader }),
+	);
 	try {
-		const { problems } = checkRoleDirs(dir);
+		const { problems } = checkRoleDirs(path.join(root, ".pi", "agents"));
 		assert.equal(problems.length, 1);
-		assert.match(problems[0], /subagentOnlyExtensions names \/nonexistent\/profile-loader\.ts/);
+		assert.match(problems[0], /subagentOnlyExtensions names .*md-role\.ts/);
 		assert.match(problems[0], /no confinement at all/);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("仓库外且本机不存在的 loader 记为不可验证，不算错误（CI 里跑不动另一次检出）", () => {
+	// 另一台机器/另一次检出的绝对路径：这里判不了，只能跳过，否则 CI 上每条都是「缺失」。
+	const dir = withRoleDirs({
+		"coder.md": md({ loader: "/nonexistent-checkout/loader.ts" }),
+	});
+	try {
+		const { problems, report } = checkRoleDirs(dir);
+		assert.deepEqual(problems, []);
+		assert.deepEqual(report, []);
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
 	}

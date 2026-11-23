@@ -19,7 +19,7 @@
 // between entries; matching "the first run of `- ` lines" stops at the first comment, which reported
 // working configs as broken three separate times.
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { basename, isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /** The floor every role md with bash must carry: history rewrites and recursive deletes. */
@@ -182,6 +182,8 @@ export function knownMiseTasks(toml) {
 export function checkRoleDirs(dir, { miseToml, root = resolve(dir, "..", "..") } = {}) {
 	const problems = [];
 	const report = [];
+	// Paths this machine cannot verify (another checkout's extension): reported, never fatal.
+	const unverifiable = [];
 	const knownTasks = miseToml ? knownMiseTasks(miseToml) : null;
 	const files = readdirSync(dir)
 		.filter((name) => name.endsWith(".md"))
@@ -192,8 +194,18 @@ export function checkRoleDirs(dir, { miseToml, root = resolve(dir, "..", "..") }
 		const text = readFileSync(path, "utf8");
 
 		// --- loader paths: a missing one means the child runs unconfined while the dispatch succeeds
+		//
+		// A role md may legitimately point outside its own repo (pi-wake lists this repo's loader), so an
+		// absolute path is not portable and cannot be verified in a fresh checkout. Verify what the machine
+		// running the check can verify: anything inside this repo must exist, anything outside is checked
+		// only when its directory exists here — otherwise the CI answer would be "every path is missing".
 		for (const entry of loaderEntries(text)) {
 			const resolved = isAbsolute(entry) ? entry : resolve(root, entry);
+			const inside = resolved === root || resolved.startsWith(root + sep);
+			if (!inside && !exists(dirname(resolved))) {
+				unverifiable.push(`${path}: ${entry}`);
+				continue;
+			}
 			if (!exists(resolved)) {
 				problems.push(
 					`${path}: subagentOnlyExtensions names ${entry}, which does not exist — the role would load no confinement at all`,
@@ -253,7 +265,7 @@ export function checkRoleDirs(dir, { miseToml, root = resolve(dir, "..", "..") }
 		}
 	}
 
-	return { report, problems };
+	return { report, problems, unverifiable };
 }
 
 function main() {
@@ -269,8 +281,14 @@ function main() {
 		miseToml = undefined;
 	}
 
-	const { report, problems } = checkRoleDirs(dir, { miseToml });
+	const { report, problems, unverifiable } = checkRoleDirs(dir, { miseToml });
 	for (const line of report) console.log(line);
+	// Silent skipping is how a check rots: say which paths this checkout could not verify.
+	if (unverifiable.length > 0) {
+		console.log(
+			`\n${unverifiable.length} loader path(s) outside this checkout, not verified here:\n${unverifiable.join("\n")}`,
+		);
+	}
 
 	if (problems.length > 0) {
 		console.error(
