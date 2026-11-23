@@ -21,20 +21,28 @@ sandbox that enforces the same boundary. Separately, a section of `AGENTS.md` fe
 ```bash
 cd packages/pi-plugin
 pnpm install
-./install.sh
-```
-
-`install.sh` builds the sandbox helper, checks that the kernel can enforce it, and symlinks
-`~/.pi/agent/extensions/pi-subagents-extend`, which pi discovers on start. With no bindings the
-extension is a no-op, so the global link does not affect a parent session or an unscoped subagent.
-`./install.sh --uninstall` removes the link. Everything it does by hand:
-
-```bash
 pnpm run build:helper   # cargo build --release, then copy the binary into bin/
 ```
 
+Then let pi load the package — pick one channel, all four are described in
+[How the extension gets loaded](docs/loading.md):
+
+```bash
+ln -s "$PWD" ../../.pi/extensions/pi-subagents-extend   # this project only
+pi install ./                                          # every project
+pi install --local ./                                  # one project, declaratively
+pi -e ./                                              # one invocation
+```
+
+Where it is loaded decides which behaviour you get: the parent-side features (dispatch narrowing, the
+scope and bash judge, the tool-face preflight, the worktree default, `.pi/main-only.md` injection, the
+subagent-only skill filter) only exist in a session that has this package, while a subagent's own
+confinement comes from its role md's `subagentOnlyExtensions` entries and works either way.
+
 If the helper is ever missing, a session with `bash` enabled says so when it starts and names that
 command — it does not wait for the first `bash` call to fail.
+
+
 
 To scope only one agent's subagents, skip the global link and declare the extension in that agent's
 frontmatter instead:

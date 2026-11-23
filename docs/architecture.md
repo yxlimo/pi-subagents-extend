@@ -21,6 +21,10 @@ pi's frontmatter has two fields that matter here: `subagentOnlyExtensions` (this
 subagents) and `extensions` (same, plus the session itself). Foreground subagents load only what
 is declared there; background subagents additionally load ambient extensions.
 
+What "ambient" means concretely — which directories pi scans, what `pi install` writes, and what quietly
+does nothing when the parent session does not have this package — is in
+[How the extension gets loaded](loading.md).
+
 ## How the code is divided
 
 `src/index.ts` is the assembly layer: it reads the bindings once, creates the session
