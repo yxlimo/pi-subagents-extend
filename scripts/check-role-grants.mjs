@@ -1,106 +1,29 @@
 #!/usr/bin/env node
-// Every `extend.permissions.write` entry in a role md is matched against the session cwd, so a
-// typo does not fail loudly — it produces a role that refuses all writes while looking exactly
-// like a working boundary. That happened three times here: a missing `packages/pi-plugin/` prefix,
-// `SKILL.md` at a path that does not exist, and a scratch directory one level short.
+// Role md config checker. Every rule here exists because the failure it catches was silent:
 //
-// So: an entry that does not exist is only legitimate if the role's `setup.preExec` creates it.
-// Anything else is a dead grant, and a role whose only grants are dead cannot write at all.
+//   write grants     A `extend.permissions.write` entry is matched against the session cwd, so a typo
+//                    produces a role that refuses all writes while looking exactly like a working
+//                    boundary. That happened three times: a missing `packages/pi-plugin/` prefix,
+//                    `SKILL.md` at a path that does not exist, and a scratch directory one level short.
+//   deny floor       The bindings file that used to supply `git commit`, `git push` and the rest to
+//                    every role is gone, so a role md that omits the deny list simply has none. A
+//                    subagent that can commit and push is the exact failure the floor prevented.
+//   gate commands    A role md that tells the subagent to run a gate it may not run is worse than no
+//                    gate: the child spends calls on the refusal and the contradiction reads like a
+//                    sandbox bug.
+//   loader paths     `subagentOnlyExtensions` naming a file that no longer exists loads nothing, so the
+//                    role runs with no confinement at all — and the dispatch still succeeds.
+//
+// Parsing: these files are hand-written YAML and the shape is fixed, so this reads them by indentation
+// instead of taking a dependency on a parser. Every list reader tolerates `# comments` and blank lines
+// between entries; matching "the first run of `- ` lines" stops at the first comment, which reported
+// working configs as broken three separate times.
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, isAbsolute, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const dir = process.argv[2] ?? ".pi/agents";
-const exists = (p) => {
-	try {
-		statSync(p);
-		return true;
-	} catch {
-		return false;
-	}
-};
-const isDirectory = (path) => {
-	try {
-		return statSync(path).isDirectory();
-	} catch {
-		return false;
-	}
-};
-
-// Pull a block scalar or flow list out of the YAML frontmatter without a parser: these files are
-// hand-written, the shape is fixed, and a dependency would have to be installed to run a check
-// that guards a config typo.
-function writeEntries(text) {
-	const block = text.match(/^[ \t]*write:[ \t]*\n((?:[ \t]+-[ \t]+.*\n)+)/m);
-	if (block) {
-		return block[1]
-			.split("\n")
-			.map((line) => line.replace(/^[ \t]*-[ \t]*/, "").trim())
-			.filter(Boolean)
-			.map((entry) => entry.replace(/^["']|["']$/g, ""));
-	}
-	const flow = text.match(/^[ \t]*write:[ \t]*\[(.*)\]/m);
-	if (!flow) return [];
-	return flow[1]
-		.split(",")
-		.map((entry) => entry.trim().replace(/^["']|["']$/g, ""))
-		.filter(Boolean);
-}
-
-// Approximate the creation shapes role mds actually use: `mkdir -p <dir>` creates that directory,
-// and a copy/move into a directory creates one file named after its source there. Redirections,
-// loops and globs are deliberately not modelled — reporting a reachable grant as unreachable is
-// safer than hiding a dead one.
-function createdPaths(preExec) {
-	const created = [];
-	for (const command of preExec.split(/\s*(?:&&|;)\s*/)) {
-		const tokens =
-			command.match(/"[^"]*"|'[^']*'|\S+/g)?.map((token) => token.replace(/^["']|["']$/g, "")) ?? [];
-		const [program, ...args] = tokens;
-		// Flags are not paths; `--` is filtered too because it also starts with `-`.
-		const operands = args.filter((arg) => !arg.startsWith("-"));
-		if (program === "mkdir" && args.includes("-p")) {
-			created.push(...operands);
-			continue;
-		}
-		if (!["cp", "install", "mv"].includes(program) || operands.length < 2) continue;
-		const destination = operands[operands.length - 1];
-		const source = operands[operands.length - 2];
-		created.push(destination);
-		if (destination.endsWith("/") || isDirectory(destination)) {
-			created.push(join(destination, basename(source)));
-		}
-	}
-	return created;
-}
-
-const problems = [];
-const report = [];
-for (const file of readdirSync(dir).filter((name) => name.endsWith(".md")).sort()) {
-	const path = join(dir, file);
-	const text = readFileSync(path, "utf8");
-	const entries = writeEntries(text);
-	if (entries.length === 0) continue;
-	// `preExec` runs unsandboxed at session start, which is the only way a role can create a path
-	// the sandbox would otherwise have to grant first. Excuse only the exact paths the command
-	// creates: a path merely mentioned in it (or sitting under a directory it creates) can still
-	// be dead, which is exactly what this check exists to catch.
-	const preExec = (text.match(/^\s+preExec:[ \t]*(.+)$/m) ?? [])[1] ?? "";
-	const missing = entries.filter((entry) => !exists(entry));
-	const created = createdPaths(preExec);
-	const orphaned = missing.filter((entry) => !created.includes(entry));
-	if (orphaned.length > 0) {
-		problems.push(`${path}: ${orphaned.join(", ")}`);
-	}
-	report.push(
-		`${path}: ${entries.length} entries, ${missing.length} created at session start` +
-			(preExec ? " (preExec present)" : ""),
-	);
-}
-// There is no project-wide floor any more: the bindings file that used to supply `git commit`,
-// `git push` and the rest to every role is gone, so a role md that omits the deny list simply has
-// none. A subagent that can commit and push is the exact failure the floor used to prevent, and
-// nothing else would notice — so the omission is an error here.
-const REQUIRED_DENY = [
+/** The floor every role md with bash must carry: history rewrites and recursive deletes. */
+export const REQUIRED_DENY = [
 	"git commit",
 	"git push",
 	"git rebase",
@@ -112,64 +35,71 @@ const REQUIRED_DENY = [
 	"rm -rf",
 ];
 
-for (const file of readdirSync(dir).filter((name) => name.endsWith(".md")).sort()) {
-	const path = join(dir, file);
-	const text = readFileSync(path, "utf8");
-	if (!/^\s+bash:/m.test(text)) continue;
-	const block = text.match(/^[ \t]*deny:[ \t]*\n((?:[ \t]+-[ \t]+.*\n)+)/m);
-	const denied = block
-		? block[1]
-				.split("\n")
-				.map((value) => value.replace(/^[ \t]*-[ \t]*/, "").trim())
-				.filter(Boolean)
-		: [];
-	const absent = REQUIRED_DENY.filter((entry) => !denied.includes(entry));
-	if (absent.length > 0) {
-		problems.push(`${path}: deny list is missing ${absent.join(", ")}`);
-	}
-}
+const stripQuotes = (value) => value.replace(/^["']|["']$/g, "");
 
-// A role md that tells the subagent to run a gate it is not allowed to run is worse than no gate
-// at all: the child spends calls on the refusal and the contradiction reads like a sandbox bug.
-// Both halves live in the same file, so the file can be checked against itself. Only the fenced
-// blocks count — those are the gates — because prose legitimately names commands the role is not
-// supposed to run (a neighbour md says which task covers a suite that runs elsewhere).
-const MISE_TOML = "mise.toml";
-let knownTasks = null;
-try {
-	const toml = readFileSync(MISE_TOML, "utf8");
-	const names = [...toml.matchAll(/^\[tasks\.(?:"([^"]+)"|([A-Za-z0-9:_-]+))\]/gm)].map(
-		(match) => match[1] ?? match[2],
-	);
-	const aliases = [...toml.matchAll(/^alias\s*=\s*\[(.*)\]/gm)].flatMap((match) =>
-		[...match[1].matchAll(/"([^"]+)"/g)].map((alias) => alias[1]),
-	);
-	knownTasks = new Set([...names, ...aliases]);
-} catch {
-	// No task table in this checkout: the allowlist half still runs, the existence half is skipped.
-}
-
-// The allow list is hand-written YAML with comments between entries. Matching "the first run of
-// `- ` lines" stops at the first comment and drops everything after it — when this check was first
-// written that reported two working gates as refused. Read by indentation to the end of the block.
-function allowEntries(text) {
+/**
+ * Read one `key:` list out of the frontmatter, by indentation.
+ *
+ * Returns `null` when the key is absent, `[]` when it is present but empty. Comment lines inside the
+ * block are skipped rather than treated as the end of the list.
+ */
+export function listBlock(text, key) {
 	const lines = text.split("\n");
-	const start = lines.findIndex((line) => /^[ \t]*allow:[ \t]*$/.test(line));
+	const start = lines.findIndex((line) => new RegExp(`^[ \\t]*${key}:[ \\t]*$`).test(line));
 	if (start === -1) return null;
 	const indent = lines[start].search(/\S/);
 	const entries = [];
 	for (const line of lines.slice(start + 1)) {
-		if (!line.trim()) continue;
+		const trimmed = line.trim();
+		if (trimmed.startsWith("#")) continue;
+		if (!trimmed) continue;
 		if (line.search(/\S/) <= indent) break;
 		const item = line.match(/^[ \t]*-[ \t]+(.*)$/);
-		if (item) entries.push(item[1].trim());
+		if (item) entries.push(stripQuotes(item[1].trim()));
 	}
 	return entries;
 }
 
-// The evaluator treats an entry beginning `re:` as a pattern, so a literal comparison here would
-// report every command covered by a pattern as refused.
-function allows(entries, command) {
+/** Read a flow list (`key: [a, b]`) from one line. Returns null when the shape is not a flow list. */
+export function flowList(text, key) {
+	const match = text.match(new RegExp(`^[ \\t]*${key}:[ \\t]*\\[(.*)\\]`, "m"));
+	if (!match) return null;
+	return match[1]
+		.split(",")
+		.map((entry) => stripQuotes(entry.trim()))
+		.filter(Boolean);
+}
+
+/** `write` accepts both shapes; the block form wins when both somehow appear. */
+export function writeEntries(text) {
+	return listBlock(text, "write") ?? flowList(text, "write") ?? [];
+}
+
+export function denyEntries(text) {
+	return listBlock(text, "deny") ?? [];
+}
+
+export function allowEntries(text) {
+	return listBlock(text, "allow");
+}
+
+export function scopeEntries(text) {
+	return listBlock(text, "scope") ?? flowList(text, "scope") ?? [];
+}
+
+/** `subagentOnlyExtensions` is a comma-separated list on one line. */
+export function loaderEntries(text) {
+	const match = text.match(/^[ \t]*subagentOnlyExtensions:[ \t]*(.+)$/m);
+	if (!match) return [];
+	return match[1]
+		.split(",")
+		.map((entry) => stripQuotes(entry.trim()))
+		.filter(Boolean);
+}
+
+// The evaluator treats an entry beginning `re:` as a pattern, so a literal comparison would report
+// every command covered by a pattern as refused.
+export function allows(entries, command) {
 	return entries.some((entry) => {
 		if (entry === command) return true;
 		const pattern = entry.match(/^re:(.*)$/);
@@ -182,34 +112,173 @@ function allows(entries, command) {
 	});
 }
 
-for (const file of readdirSync(dir).filter((name) => name.endsWith(".md")).sort()) {
-	const path = join(dir, file);
-	const text = readFileSync(path, "utf8");
-	const entries = allowEntries(text);
-	if (!entries) continue;
-	const gates = [...text.matchAll(/```[\s\S]*?```/g)].flatMap((fence) =>
-		[...fence[0].matchAll(/mise run ([A-Za-z0-9:_-]+)/g)].map((match) => match[1]),
+// Approximate the creation shapes role mds actually use: `mkdir -p <dir>` creates that directory,
+// and a copy/move into a directory creates one file named after its source there. Redirections,
+// loops and globs are deliberately not modelled — reporting a reachable grant as unreachable is
+// safer than hiding a dead one.
+export function createdPaths(preExec, root = process.cwd()) {
+	const created = [];
+	const isDirectory = (path) => {
+		try {
+			return statSync(path).isDirectory();
+		} catch {
+			return false;
+		}
+	};
+
+	// Every path this returns is absolute, resolved against the repo the md belongs to: `preExec` runs
+	// with that repo as its cwd, while this checker may be started from anywhere.
+	const absolute = (path) => (isAbsolute(path) ? path : resolve(root, path));
+	for (const command of preExec.split(/\s*(?:&&|;)\s*/)) {
+		const tokens =
+			command.match(/"[^"]*"|'[^']*'|\S+/g)?.map((token) => stripQuotes(token)) ?? [];
+		const [program, ...args] = tokens;
+		// Flags are not paths; `--` is filtered too because it also starts with `-`.
+		const operands = args.filter((arg) => !arg.startsWith("-"));
+		if (program === "mkdir" && args.includes("-p")) {
+			created.push(...operands.map(absolute));
+			continue;
+		}
+		if (!["cp", "install", "mv"].includes(program) || operands.length < 2) continue;
+		const destination = operands[operands.length - 1];
+		const source = operands[operands.length - 2];
+		// A trailing slash marks "this is a directory", not part of the path: keep the entry
+		// comparable with the grant it is excusing.
+		const target = absolute(destination.replace(/\/+$/, "") || "/");
+		created.push(target);
+		if (destination.endsWith("/") || isDirectory(absolute(destination))) {
+			created.push(join(target, basename(source)));
+		}
+	}
+	return created;
+}
+
+const exists = (path) => {
+	try {
+		statSync(path);
+		return true;
+	} catch {
+		return false;
+	}
+};
+
+/** Parse the mise task names/aliases so a gate can be checked against a real task. */
+export function knownMiseTasks(toml) {
+	const names = [...toml.matchAll(/^\[tasks\.(?:"([^"]+)"|([A-Za-z0-9:_-]+))\]/gm)].map(
+		(match) => match[1] ?? match[2],
 	);
-	const unique = [...new Set(gates)];
-	const refused = unique.filter((task) => !allows(entries, `mise run ${task}`));
-	const unknown = knownTasks ? unique.filter((task) => !knownTasks.has(task)) : [];
-	if (refused.length > 0) {
-		problems.push(
-			`${path}: the gate names ${refused.map((task) => `mise run ${task}`).join(", ")} but bash.allow does not — the role would refuse its own acceptance command`,
+	const aliases = [...toml.matchAll(/^alias\s*=\s*\[(.*)\]/gm)].flatMap((match) =>
+		[...match[1].matchAll(/"([^"]+)"/g)].map((alias) => alias[1]),
+	);
+	return new Set([...names, ...aliases]);
+}
+
+/**
+ * Check every role md in `dir`.
+ *
+ * `miseToml` is optional: when it is absent the gate half still runs (allowlist), only the
+ * "task exists" half is skipped.
+ */
+export function checkRoleDirs(dir, { miseToml, root = resolve(dir, "..", "..") } = {}) {
+	const problems = [];
+	const report = [];
+	const knownTasks = miseToml ? knownMiseTasks(miseToml) : null;
+	const files = readdirSync(dir)
+		.filter((name) => name.endsWith(".md"))
+		.sort();
+
+	for (const file of files) {
+		const path = join(dir, file);
+		const text = readFileSync(path, "utf8");
+
+		// --- loader paths: a missing one means the child runs unconfined while the dispatch succeeds
+		for (const entry of loaderEntries(text)) {
+			const resolved = isAbsolute(entry) ? entry : resolve(root, entry);
+			if (!exists(resolved)) {
+				problems.push(
+					`${path}: subagentOnlyExtensions names ${entry}, which does not exist — the role would load no confinement at all`,
+				);
+			}
+		}
+
+		// --- write grants
+		// Grants are matched against the *session* cwd, which is the repo this md belongs to — not the
+		// cwd of whoever runs this checker. Everything below resolves against `root` for that reason.
+		const entries = writeEntries(text);
+		if (entries.length > 0) {
+			// `preExec` runs unsandboxed at session start, which is the only way a role can create a path
+			// the sandbox would otherwise have to grant first. Excuse only the exact paths the command
+			// creates: a path merely mentioned in it (or sitting under a directory it creates) can still
+			// be dead, which is exactly what this check exists to catch.
+			const preExec = (text.match(/^\s+preExec:[ \t]*(.+)$/m) ?? [])[1] ?? "";
+			const absolute = entries.map((entry) => (isAbsolute(entry) ? entry : resolve(root, entry)));
+			const created = createdPaths(preExec, root);
+			const orphaned = entries.filter((_, index) => {
+				if (exists(absolute[index])) return false;
+				return !created.includes(absolute[index]);
+			});
+			if (orphaned.length > 0) problems.push(`${path}: ${orphaned.join(", ")}`);
+			report.push(
+				`${path}: ${entries.length} entries, ${orphaned.length} dead` +
+					(preExec ? " (preExec present)" : ""),
+			);
+		}
+
+		// --- deny floor
+		if (/^\s+bash:/m.test(text)) {
+			const denied = denyEntries(text);
+			const absent = REQUIRED_DENY.filter((entry) => !denied.includes(entry));
+			if (absent.length > 0) problems.push(`${path}: deny list is missing ${absent.join(", ")}`);
+		}
+
+		// --- gate commands named in fenced blocks must be runnable by the same file's allow list
+		// Only the fenced blocks count — those are the gates — because prose legitimately names
+		// commands the role is not supposed to run (a neighbour md says which task covers a suite that
+		// runs elsewhere).
+		const allow = allowEntries(text);
+		if (!allow) continue;
+		const gates = [...text.matchAll(/```[\s\S]*?```/g)].flatMap((fence) =>
+			[...fence[0].matchAll(/mise run ([A-Za-z0-9:_-]+)/g)].map((match) => match[1]),
 		);
+		const unique = [...new Set(gates)];
+		const refused = unique.filter((task) => !allows(allow, `mise run ${task}`));
+		const unknown = knownTasks ? unique.filter((task) => !knownTasks.has(task)) : [];
+		if (refused.length > 0) {
+			problems.push(
+				`${path}: the gate names ${refused.map((task) => `mise run ${task}`).join(", ")} but bash.allow does not — the role would refuse its own acceptance command`,
+			);
+		}
+		if (unknown.length > 0) {
+			problems.push(`${path}: the gate names unknown mise task(s) ${unknown.join(", ")}`);
+		}
 	}
-	if (unknown.length > 0) {
-		problems.push(`${path}: the gate names unknown mise task(s) ${unknown.join(", ")}`);
-	}
+
+	return { report, problems };
 }
 
+function main() {
+	const dir = process.argv[2] ?? ".pi/agents";
+	// Everything resolves against the repo the role mds belong to, so `mise run check:grants` can point
+	// at another checkout and still read that checkout's task table.
+	const root = resolve(dir, "..", "..");
+	let miseToml;
+	try {
+		miseToml = readFileSync(join(root, "mise.toml"), "utf8");
+	} catch {
+		// No task table in this checkout: the allowlist half still runs, the existence half is skipped.
+		miseToml = undefined;
+	}
 
-for (const line of report) console.log(line);
+	const { report, problems } = checkRoleDirs(dir, { miseToml });
+	for (const line of report) console.log(line);
 
-if (problems.length > 0) {
-	console.error(
-		`\n${problems.length} role md problem(s) — a dead write grant refuses every write, and a missing deny entry lets the role commit or push:\n${problems.join("\n")}`,
-	);
-	process.exit(1);
+	if (problems.length > 0) {
+		console.error(
+			`\n${problems.length} role md problem(s) — a dead write grant refuses every write, a missing deny entry lets the role commit or push, and a missing loader path leaves the child unconfined:\n${problems.join("\n")}`,
+		);
+		process.exit(1);
+	}
+	console.log("\nrole config: every write grant is reachable, every deny list complete, every loader present");
 }
-console.log("\nrole config: every write grant is reachable, every deny list complete");
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();

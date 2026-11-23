@@ -47,6 +47,10 @@ for f in packages/pi-plugin/test/docs/*.test.ts; do node "$f" || exit 1; done
 description = "Role md config — dead write grants and missing deny entries"
 run = "node scripts/check-role-grants.mjs"
 
+[tasks."test:grants"]
+description = "Tests for the role md checker itself — a checker that reports wrongly is worse than none"
+run = "node --test scripts/check-role-grants.test.mjs"
+
 
 # --- 区域任务：一个区域一个目录，加文件不用改这里 ---
 #
@@ -140,7 +144,7 @@ run = "node packages/pi-plugin/test/hashline-e2e.test.ts"
 
 [tasks."test:fast"]
 description = "Everything that does not need the helper"
-depends = ["lint", "typecheck", "test:unit", "test:docs"]
+depends = ["lint", "typecheck", "test:unit", "test:docs", "test:grants"]
 
 [tasks."test:all"]
 description = "The whole suite. Use only before merging to main."
