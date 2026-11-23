@@ -18,40 +18,44 @@ sandbox that enforces the same boundary. Separately, a section of `AGENTS.md` fe
 
 ## Install
 
+The package ships on npm with the sandbox helper prebuilt for linux-x64 and linux-arm64, so an
+install needs neither Rust nor a network beyond npm:
+
+```bash
+pi install npm:pi-subagents-extend@0.1.0    # the exact version is the pin
+```
+
+From a checkout instead (contributing, or a change you want to try before it ships):
+
 ```bash
 cd packages/pi-plugin
 pnpm install
-pnpm run build:helper   # cargo build --release, then copy the binary into bin/
+pnpm run build:helper                # cargo build --release, then into bin/
+pi -e "$PWD"                         # this session only, no settings change
 ```
 
-Then let pi load the package — pick one channel, all four are described in
-[How the extension gets loaded](docs/loading.md):
+[How the extension gets loaded](docs/loading.md) covers every channel pi accepts, and which
+parent-side features do nothing when only subagents load this package.
 
-```bash
-ln -s "$PWD" ../../.pi/extensions/pi-subagents-extend   # this project only
-pi install ./                                          # every project
-pi install --local ./                                  # one project, declaratively
-pi -e ./                                              # one invocation
-```
+If the helper is missing or does not match the platform, a session with `bash` enabled says so when it
+starts — it names the path the package carries and the `PI_SUBAGENTS_EXTEND_HELPER_PATH` override,
+rather than waiting for the first `bash` call to fail.
 
-Where it is loaded decides which behaviour you get: the parent-side features (dispatch narrowing, the
-scope and bash judge, the tool-face preflight, the worktree default, `.pi/main-only.md` injection, the
-subagent-only skill filter) only exist in a session that has this package, while a subagent's own
-confinement comes from its role md's `subagentOnlyExtensions` entries and works either way.
-
-If the helper is ever missing, a session with `bash` enabled says so when it starts and names that
-command — it does not wait for the first `bash` call to fail.
-
-
-
-To scope only one agent's subagents, skip the global link and declare the extension in that agent's
-frontmatter instead:
+A role is declared in the agent's own markdown: `subagentOnlyExtensions` names the md-role loader, and
+the `extend` block carries its policy. `.pi/agents/` in this repository has ten working examples —
+`coder-bash.md` is the shortest one to copy.
 
 ```markdown
 ---
 name: worker
 description: Implements a task within the given scope
-subagentOnlyExtensions: /path/to/pi-subagents-extend/packages/pi-plugin/src/index.ts
+systemPromptMode: append  # replace drops the <active_agent> tag the loader reads
+subagentOnlyExtensions: /path/to/pi-subagents-extend/.pi/agent-profiles/md-role.ts
+extend:
+  permissions:
+    scope: ["src/auth/**"]
+    bash:
+      allow: ["ls", "rg", "npm test"]
 ---
 ```
 

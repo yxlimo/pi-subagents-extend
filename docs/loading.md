@@ -2,7 +2,7 @@
 
 Which behaviour you get depends on **how** pi loads this package, not on what the session looks like
 at run time. That is why the three entry points are split the way they are (see
-[Architecture](architecture.md#three-entry-points)) and why "it works in my project" says nothing about
+[Architecture](architecture.md#three-entry-points)) and why "it works in my checkout" says nothing about
 any other project.
 
 ## The two ways pi finds an extension
@@ -23,8 +23,7 @@ entry passed with `-e` cannot.
 **Declarative.** `~/.pi/agent/settings.json` (or `.pi/settings.json` for one project, which again needs
 trust) accepts two lists: `packages` for npm and git sources, `extensions` for local paths. `pi install
 <source>` writes the personal one, `--local` writes the project one, `pi list` shows what is
-configured, and `pi -e <source>` tries a source for one invocation. A *local* source is loaded from the
-resolved path without copying, which is what makes it usable while the package is still being edited.
+configured, and `pi -e <source>` tries a source for one invocation.
 
 ## Which channel each entry point needs
 
@@ -40,47 +39,41 @@ A subagent's own confinement does **not** depend on the parent being loaded: the
 loads them whether or not the parent has this package. The parent-side features above are the ones that
 quietly do nothing.
 
-## What this machine actually has
+## Installing
 
-Measured 2026-11-23, because "I think it is installed" is how a month gets spent debugging nothing:
-
-- `~/.pi/agent/settings.json` → `packages` **does not** list this package: it is not globally loaded.
-- `~/extensions/.pi/extensions/pi-subagents-extend` → symlink to `packages/pi-plugin`. So it loads in
-  this repository, and only there.
-- `~/.pi/agent/extensions/pi-subagent-only-skills` → symlink to `~/extensions/subagent-only-skills`.
-  That repo was merged into this one (`src/main-skills.ts`) and is deprecated, but the global link is
-  still there: two extensions answering the same question, in every project. Remove that link when the
-  merged version is loaded wherever it was needed.
-
-The consequence to keep in mind while reviewing: a parent-side change verified by dispatching from this
-repository proves nothing about a session in another project, because there this package is not in the
-parent at all.
-
-## Installing it somewhere else
+The supported distribution is npm. No development symlink, in this repo or globally:
 
 ```bash
-# this project only (what this machine does today)
-ln -s "$PWD/packages/pi-plugin" .pi/extensions/pi-subagents-extend
-
-# one project, declaratively, without copying the source
-pi install --local ./packages/pi-plugin
-
-# every project
-pi install ./packages/pi-plugin
-
-# one invocation, no settings change
-pi -e ./packages/pi-plugin
+pi install npm:pi-subagents-extend@0.1.0    # exact version: the pin is the version number
+pi list                                     # what is configured
 ```
 
-All four need `packages/pi-plugin/bin/pi-subagents-extend-helper` to exist; `pnpm run build:helper` in
-`packages/pi-plugin` builds and installs it. Without the helper a session with `bash` says so at start
-and names that command instead of failing on the first command.
+`pi update --extensions` reconciles an unpinned range; an exact version stays where it is. To try the
+package for a single session without writing settings, `pi -e npm:pi-subagents-extend@0.1.0`.
+
+## What is in the package
+
+- `src/` — the three entry points and the modules behind them.
+- `skills/` — the three skills (`pi-subagents-extend`, `…-context`, `…-probes`).
+- `bin/pi-subagents-extend-helper-<platform>-<arch>` — the sandbox helper, prebuilt for **linux-x64**
+  and **linux-arm64**. It needs Landlock and unprivileged user namespaces, so it is Linux-only; on
+  anything else every bash command is refused with a message that says so.
+
+The resolver looks for exactly that one path, chosen by `process.platform` and `process.arch`. An
+explicit `PI_SUBAGENTS_EXTEND_HELPER_PATH` overrides it (a build of your own, a stub in a test).
+
+## Developing against a checkout
+
+`pi -e ./packages/pi-plugin` loads the working tree for one session, and `pnpm run build:helper` puts
+the helper at the same `bin/<platform>-<arch>` path the package uses, so the dev loop needs no
+symlink either. The role mds under `.pi/agents/` still name their loaders by absolute path — that is
+how a dispatched child finds them regardless of how the parent was loaded.
 
 ## Verifying the load
 
 ```bash
-pi list                                   # configured packages and extensions
-ls -l ~/.pi/agent/extensions .pi/extensions   # discovery directories
+pi list                                       # configured packages and extensions
+ls -l ~/.pi/agent/extensions .pi/extensions    # discovery directories
 ```
 
 Inside a session, `/permission` reports the active policy. A role md's own `extend.permissions` block

@@ -1,0 +1,135 @@
+name: Publish
+
+# One job on purpose: the tarball has to contain the helper binaries built
+# here, so building, testing and packing must share a workspace.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    # The npm Trusted Publisher entry for this package names this
+    # environment; the OIDC claim is rejected when they disagree.
+    environment: npm
+    permissions:
+      contents: read
+      # Provenance: npm verifies this token against its public log.
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          # The tag commit is what gets published; nothing here pushes back.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115  # v6
+        with:
+          version: 12
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: packages/pi-plugin/pnpm-lock.yaml
+
+      # Trusted publishing needs npm 11.5.1 or newer; the Node 22 image
+      # ships 10.x, which would fall back to asking for a token.
+      - name: Toolchain floor
+        run: |
+          npm install -g npm@11 >/dev/null
+          npm --version
+
+      - name: Install dependencies
+        working-directory: packages/pi-plugin
+        run: pnpm install --frozen-lockfile
+
+      # The helper is Linux-only and arch-specific, so the package carries
+      # one binary per platform, named so the resolver can pick it by
+      # process.platform/process.arch. arm64 cross-compiles: the crate has
+      # no C dependency beyond libc.
+      - name: Build the helper for x64 and arm64
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc-aarch64-linux-gnu
+          rustup target add aarch64-unknown-linux-gnu
+
+          manifest=packages/helper/Cargo.toml
+          cargo build --release --manifest-path "$manifest" --locked
+          mkdir -p packages/pi-plugin/bin
+          bin=packages/pi-plugin/bin
+          helper=packages/helper/target/release/pi-subagents-extend-helper
+          cp "$helper" "$bin/pi-subagents-extend-helper-linux-x64"
+
+          target=aarch64-unknown-linux-gnu
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc \
+            cargo build --release --target "$target" \
+            --manifest-path "$manifest" --locked
+          arm=packages/helper/target/$target/release
+          cp "$arm/pi-subagents-extend-helper" \
+            "$bin/pi-subagents-extend-helper-linux-arm64"
+
+          # A cross-compiled binary that is really the host arch would pass
+          # every later check and fail only on an arm64 machine.
+          file "$bin/pi-subagents-extend-helper-linux-x64"
+          file "$bin/pi-subagents-extend-helper-linux-arm64"
+          file "$bin/pi-subagents-extend-helper-linux-arm64" | grep -q aarch64
+
+      # The tag triggers the release, so it must name the version being
+      # packed; otherwise a stray tag publishes whatever the manifest says.
+      - name: Tag matches the package version
+        working-directory: packages/pi-plugin
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME != version $version"
+            exit 1
+          fi
+          echo "publishing $version"
+
+      # A release is only as good as the checks that ran on it. `pnpm test`
+      # walks test/, so a suite nobody added to a list still runs here.
+      - name: Role config checks
+        run: |
+          node scripts/check-role-grants.mjs
+          node --test scripts/check-role-grants.test.mjs
+
+      - name: Helper tests
+        run: |
+          cargo test --manifest-path packages/helper/Cargo.toml --locked
+
+      - name: Extension tests
+        working-directory: packages/pi-plugin
+        run: pnpm test
+
+      # The binary is gitignored and was built a few steps ago, so "it is in
+      # the tarball" is asserted rather than assumed: an install without it
+      # refuses every bash command.
+      - name: Both platform binaries are in the tarball
+        working-directory: packages/pi-plugin
+        run: |
+          tgz=$(npm pack --silent --pack-destination /tmp)
+          tar -tzf "/tmp/$tgz" | sort > /tmp/entries
+          for platform in linux-x64 linux-arm64; do
+            grep -qx "package/bin/pi-subagents-extend-helper-$platform" \
+              /tmp/entries || {
+              echo "::error::$platform is missing from the tarball"
+              exit 1
+            }
+          done
+          if grep -q '^package/test/' /tmp/entries; then
+            echo "::error::the tarball carries test/"
+            exit 1
+          fi
+          echo "tarball files: $(wc -l < /tmp/entries)"
+
+      # --provenance records this workflow, repo and commit in the public
+      # log, which is what makes the package verifiable without trusting
+      # the machine that ran it.
+      - name: Publish
+        working-directory: packages/pi-plugin
+        run: npm publish --provenance --access public

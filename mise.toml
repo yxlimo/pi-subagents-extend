@@ -11,14 +11,14 @@
 [tasks."setup:helper"]
 description = "Build the sandbox helper binary once"
 run = """
-if [ ! -x packages/pi-plugin/bin/pi-subagents-extend-helper ]; then
+helper="packages/pi-plugin/bin/pi-subagents-extend-helper-$(node -p 'process.platform+"-"+process.arch')"
+if [ ! -x "$helper" ]; then
   cargo build --release --manifest-path packages/helper/Cargo.toml --locked &&
   mkdir -p packages/pi-plugin/bin &&
-  cp packages/helper/target/release/pi-subagents-extend-helper packages/pi-plugin/bin/
+  cp packages/helper/target/release/pi-subagents-extend-helper "$helper"
 fi
 """
 sources = ["packages/helper/src/**/*.rs", "packages/helper/Cargo.toml"]
-outputs = ["packages/pi-plugin/bin/pi-subagents-extend-helper"]
 
 [tasks.lint]
 description = "ESLint the plugin"

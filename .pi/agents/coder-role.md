@@ -9,7 +9,7 @@ systemPromptMode: append
 subagentOnlyExtensions: /home/shay/extensions/pi-subagents-extend/.pi/agent-profiles/md-role.ts
 extend:
   setup:
-    preExec: mkdir -p packages/pi-plugin/bin .test-state && cp /home/shay/extensions/pi-subagents-extend/packages/pi-plugin/bin/pi-subagents-extend-helper packages/pi-plugin/bin/
+    preExec: mkdir -p packages/pi-plugin/bin .test-state && cp /home/shay/extensions/pi-subagents-extend/packages/pi-plugin/bin/pi-subagents-extend-helper-* packages/pi-plugin/bin/
   permissions:
     scope: ["."]
     write:

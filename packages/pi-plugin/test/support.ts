@@ -47,9 +47,9 @@ for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
 // `bin/` copy is the last resort for a checkout with no Rust toolchain.
 function resolveHelperBin(): string {
   const candidates = [
-    process.env.PI_SUBAGENTS_EXTEND_HELPER?.trim(),
+    process.env.PI_SUBAGENTS_EXTEND_HELPER_PATH?.trim(),
     join(repo, "..", "helper", "target", "release", "pi-subagents-extend-helper"),
-    join(repo, "bin", "pi-subagents-extend-helper"),
+    join(repo, "bin", `pi-subagents-extend-helper-${process.platform}-${process.arch}`),
   ].filter((candidate): candidate is string => Boolean(candidate))
   for (const candidate of candidates) {
     if (existsSync(candidate)) return candidate
@@ -102,7 +102,7 @@ export function described(): HelperDescription | undefined {
 // sandbox. With the stub there is nothing to enforce, so those parts are skipped
 // instead of asserting on the stub's silence.
 if (described()?.landlock?.supported) {
-  process.env.PI_SUBAGENTS_EXTEND_HELPER = helperBin()
+  process.env.PI_SUBAGENTS_EXTEND_HELPER_PATH = helperBin()
 } else {
   const stubDir = mkdtempSync(join(tmpdir(), "pi-subagents-extend-stub-"))
   const stub = join(stubDir, "pi-subagents-extend-helper")
@@ -111,7 +111,7 @@ if (described()?.landlock?.supported) {
     `#!/bin/sh\nprintf '%s\\n' '{"landlock":{"kernel_abi":7,"required_abi":7,"supported":true,"reason":null},"network_namespace":true,"resolver_sockets":[]}'\n`,
   )
   chmodSync(stub, 0o755)
-  process.env.PI_SUBAGENTS_EXTEND_HELPER = stub
+  process.env.PI_SUBAGENTS_EXTEND_HELPER_PATH = stub
   console.log(
     `  note  kernel Landlock ABI ${described()?.landlock?.kernel_abi ?? "unknown"} is below the required 7;` +
       " the suite runs against a stub helper that reports ABI 7",

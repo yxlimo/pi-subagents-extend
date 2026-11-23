@@ -40,7 +40,7 @@ namespace decisions, the capability drop and process supervision.
 
 Several scope cases do not stop at inspecting the rewritten command: they execute it, so the
 assertion is about the kernel rather than about the string. Those run only where the kernel can
-enforce the sandbox. Below Landlock ABI 7 the suite points `PI_SUBAGENTS_EXTEND_HELPER` at a stub
+enforce the sandbox. Below Landlock ABI 7 the suite points `PI_SUBAGENTS_EXTEND_HELPER_PATH` at a stub
 that answers `--describe` with ABI 7 and runs nothing, says so in its output, and the live blocks
 print `skip` — asserting on the stub's silence would test the stub, not the sandbox.
 
@@ -48,7 +48,7 @@ The helper the suite executes is the cargo build output
 (`packages/helper/target/release/pi-subagents-extend-helper`), never the copy in
 `packages/pi-plugin/bin/`: that copy is what a loaded extension resolves, so a test run that wrote
 to it would replace the binary under a live session. `pretest` therefore only builds; installing
-into `bin/` is the separate `pnpm run build:helper`, and `PI_SUBAGENTS_EXTEND_HELPER` overrides
+into `bin/` is the separate `pnpm run build:helper`, and `PI_SUBAGENTS_EXTEND_HELPER_PATH` overrides
 the path when a specific binary is wanted.
 
 Verified both ways through that override: a fake ABI 3 helper gives three skips and a green suite,

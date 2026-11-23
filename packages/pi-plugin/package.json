@@ -31,9 +31,8 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "build": "tsc -p tsconfig.json",
-    "build:helper": "cargo build --release --manifest-path ../helper/Cargo.toml --locked && mkdir -p bin && cp ../helper/target/release/pi-subagents-extend-helper bin/.helper.new && mv -f bin/.helper.new bin/pi-subagents-extend-helper && cp bin/pi-subagents-extend-helper bin/.helper.platform.new && mv -f bin/.helper.platform.new \"bin/pi-subagents-extend-helper-$(node -p 'process.platform + \"-\" + process.arch')\"",
-    "pretest": "pnpm run build:helper:test",
-    "build:helper:test": "cargo build --release --manifest-path ../helper/Cargo.toml --locked",
+    "build:helper": "cargo build --release --manifest-path ../helper/Cargo.toml --locked && mkdir -p bin && cp ../helper/target/release/pi-subagents-extend-helper bin/.helper.new && mv -f bin/.helper.new \"bin/pi-subagents-extend-helper-$(node -p 'process.platform + \"-\" + process.arch')\"",
+    "pretest": "pnpm run build:helper",
     "test": "pnpm run lint && node ../../scripts/run-tests.mjs",
     "test:mock": "node test/mock-session.test.ts",
     "test:llm": "node test/e2e.test.ts",
@@ -55,7 +54,7 @@
   "files": [
     "src",
     "skills",
-    "bin/pi-subagents-extend-helper-*"
+    "bin"
   ],
   "dependencies": {
     "yaml": "^2.9.1"

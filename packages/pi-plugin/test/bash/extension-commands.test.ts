@@ -13,8 +13,8 @@ import { handler, specOf, specPathOf, workdir, stateDir, ext } from "../harness.
 //     （实测过：helper 没装时子代理连跑四条命令，每条都拿到同一句「helper not found」，
 //     它最后自己得出了这个结论 —— 但那是四次调用换来的。）
 {
-  const real = process.env.PI_SUBAGENTS_EXTEND_HELPER
-  process.env.PI_SUBAGENTS_EXTEND_HELPER = "/nonexistent/pi-subagents-extend-helper"
+  const real = process.env.PI_SUBAGENTS_EXTEND_HELPER_PATH
+  process.env.PI_SUBAGENTS_EXTEND_HELPER_PATH = "/nonexistent/pi-subagents-extend-helper"
 
   const missing = await handler({
     cwd: workdir,
@@ -22,7 +22,9 @@ import { handler, specOf, specPathOf, workdir, stateDir, ext } from "../harness.
   })
   const said = missing.ui.join("\n")
   assert.match(said, /no sandbox helper found/, "a missing helper is announced when the session starts")
-  assert.match(said, /build:helper/, "and it names the command that fixes it")
+  // 文案是契约的一部分：缺 helper 时读者要知道去哪找（包内平台路径）或怎么覆盖（环境变量）。
+  assert.match(said, /bin\/pi-subagents-extend-helper-/, "and it names the path the package ships")
+  assert.match(said, /PI_SUBAGENTS_EXTEND_HELPER_PATH/, "and the override that points at a binary you built")
   const refused = await missing.call("bash", { command: "ls" })
   assert.equal(refused?.block, true, "bash is refused rather than attempted")
   missing.restore()
@@ -35,38 +37,29 @@ import { handler, specOf, specPathOf, workdir, stateDir, ext } from "../harness.
   assert.doesNotMatch(noBash.ui.join("\n"), /sandbox helper/, "a session with bash off says nothing")
   noBash.restore()
 
-  if (real === undefined) delete process.env.PI_SUBAGENTS_EXTEND_HELPER
-  else process.env.PI_SUBAGENTS_EXTEND_HELPER = real
+  if (real === undefined) delete process.env.PI_SUBAGENTS_EXTEND_HELPER_PATH
+  else process.env.PI_SUBAGENTS_EXTEND_HELPER_PATH = real
 
-  // 候选顺序：按平台命名的打包二进制 → 本地构建的通用名 → 仓内 cargo 产物。
-  // 第一条是 npm 安装后的唯一来源，后两条是源码 checkout 的开发兜底。
+  // 只有一条候选：npm 包内按平台命名的二进制。环境变量是覆盖，不算候选；
+  // 源码 checkout 的开发路径也是同一条 —— build:helper 就落在那里。
   const candidates = ext.helperCandidates("/x/packages/pi-plugin/src")
-  assert.equal(
-    candidates[0],
-    "/x/packages/pi-plugin/bin/pi-subagents-extend-helper-linux-x64",
-    "the packaged platform binary is looked for first",
+  assert.deepEqual(
+    candidates,
+    [`/x/packages/pi-plugin/bin/pi-subagents-extend-helper-${process.platform}-${process.arch}`],
+    "the only candidate is the packaged binary for this platform",
   )
-  assert.equal(
-    candidates[1],
-    "/x/packages/pi-plugin/bin/pi-subagents-extend-helper",
-    "a locally built helper under the generic name still resolves",
-  )
-  assert.equal(
-    candidates[2],
-    "/x/packages/helper/target/release/pi-subagents-extend-helper",
-    "the cargo artifact is a runtime candidate",
-  )
-  // 平台是可传的，断言它真的参与了命名 —— 否则「arm64 上找不到」这类报告无从判断。
+  // 平台参与命名：否则「arm64 上找不到」这类报告无从判断。
   assert.equal(
     ext.helperCandidates("/x/packages/pi-plugin/src", "linux", "arm64")[0],
     "/x/packages/pi-plugin/bin/pi-subagents-extend-helper-linux-arm64",
     "the platform argument names the packaged binary",
   )
+  // 旧名与 cargo 产物都不再是候选：包装出来的那份才是唯一的运行时来源。
   assert.ok(
-    !candidates.some((c) => c.includes("subagent-permission")),
-    "the pre-rename cache directory is not a candidate",
+    !candidates.some((c) => c.endsWith("/pi-subagents-extend-helper") || c.includes("target/release")),
+    "no generic-name or cargo-artifact candidate survives",
   )
-  console.log("  ok   缺 helper 开场告警；候选含仓内 cargo 产物，旧目录已移除")
+  console.log("  ok   缺 helper 开场告警；候选只有打包的平台二进制，旧名与 cargo 产物已移除")
 }
 
 // 83. 拒绝文案必须点名「被拒的命令」。早先只印允许列表，实测被读成

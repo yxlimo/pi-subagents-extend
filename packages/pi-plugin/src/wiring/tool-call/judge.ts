@@ -504,7 +504,7 @@ export const judgeToolCall = async ({
 		const helper = helperPath();
 		if (!helper) {
 			return deny(
-				"pi-subagents-extend: the sandbox helper (pi-subagents-extend-helper) was not found; run `pnpm run build:helper` in pi-plugin, or set PI_SUBAGENTS_EXTEND_HELPER.",
+				"pi-subagents-extend: the sandbox helper (pi-subagents-extend-helper) was not found; run `pnpm run build:helper` in pi-plugin, or set PI_SUBAGENTS_EXTEND_HELPER_PATH.",
 			);
 		}
 		const caps = describeHelper(helper);

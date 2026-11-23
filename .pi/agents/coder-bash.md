@@ -16,7 +16,7 @@ extend:
   # here because the harness writes its scratch tree inside it and the grant below has to
   # point at a path that already exists.
   setup:
-    preExec: mkdir -p packages/pi-plugin/bin .test-state && cp /home/shay/extensions/pi-subagents-extend/packages/pi-plugin/bin/pi-subagents-extend-helper packages/pi-plugin/bin/
+    preExec: mkdir -p packages/pi-plugin/bin .test-state && cp /home/shay/extensions/pi-subagents-extend/packages/pi-plugin/bin/pi-subagents-extend-helper-* packages/pi-plugin/bin/
   permissions:
     scope: ["."]
     write:

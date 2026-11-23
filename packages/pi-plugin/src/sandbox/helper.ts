@@ -22,26 +22,20 @@ const HELPER_NAME = "pi-subagents-extend-helper";
  * helper 候选路径。纯函数，便于直接钉住候选及其顺序：环境变量不是候选，
  * 而是覆盖（设了但不存在就不往下找，否则「指错了」会静默用上另一个）。
  *
- * 第一名是**按平台命名**的二进制：npm 包只能带一份打包时构建的产物，
- * 而 helper 是 Linux 特有的（Landlock + userns），所以发布时按
- * `<name>-<platform>-<arch>` 命名，安装后的副本在自己的平台上找得到、
- * 在别的平台上找不到也说得清。第二名是本地构建的通用名，第三名是源码
- * checkout 里 cargo 的产物 —— npm 安装的副本没有 ../helper，那条自然落空。
+ * 包里只有一份按平台命名的二进制：helper 是 Linux 特有的（Landlock + userns），
+ * 而一个 npm 包同时带 x64 与 arm64 两份，靠文件名区分，安装后在自己的平台上找得到、
+ * 在别的平台上找不到也说得清。候选只有这一条；环境变量是覆盖（见 helperPath）。
  */
 export function helperCandidates(
 	here: string,
 	platform: string = process.platform,
 	arch: string = process.arch,
 ): string[] {
-	return [
-		resolve(here, "..", "bin", `${HELPER_NAME}-${platform}-${arch}`),
-		resolve(here, "..", "bin", HELPER_NAME),
-		resolve(here, "..", "..", "helper", "target", "release", HELPER_NAME),
-	];
+	return [resolve(here, "..", "bin", `${HELPER_NAME}-${platform}-${arch}`)];
 }
 
 export function helperPath(): string | undefined {
-	const fromEnv = process.env.PI_SUBAGENTS_EXTEND_HELPER?.trim();
+	const fromEnv = process.env.PI_SUBAGENTS_EXTEND_HELPER_PATH?.trim();
 	if (fromEnv) return existsSync(fromEnv) ? fromEnv : undefined;
 	// 候选锚在包的 src/ 目录上；本文件在 src/sandbox/ 下，比拆分前深一层，向上补回。
 	const here = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -60,8 +54,8 @@ export function bashBlocker(helper: string | undefined): string | undefined {
 		const platform = `${process.platform}-${process.arch}`;
 		return (
 			`no sandbox helper found for ${platform}, so every bash command will be refused. ` +
-			`The package carries one as bin/${HELPER_NAME}-<platform>-<arch>; if yours is missing, ` +
-			"build one with `pnpm run build:helper` in packages/pi-plugin, or set PI_SUBAGENTS_EXTEND_HELPER."
+			`The package carries bin/${HELPER_NAME}-<platform>-<arch> (the helper needs Landlock and ` +
+			"user namespaces, so it is Linux-only); set PI_SUBAGENTS_EXTEND_HELPER_PATH to use a binary you built yourself."
 		);
 	}
 	const caps = describeHelper(helper);

@@ -20,14 +20,14 @@ directory also holds `git-excludes` and the `xdg-cache` tree. `PI_SUBAGENTS_EXTE
 directory; it defaults to `~/.cache/pi-subagents-extend`, and the tests point it at a throwaway one
 rather than redirecting `HOME`, which would also move every toolchain's own state.
 Two subcommands matter: `--spec` runs a command, `--describe` prints the capabilities as JSON and
-exits 0, or 76 when the kernel is not good enough. `PI_SUBAGENTS_EXTEND_HELPER` overrides the
+exits 0, or 76 when the kernel is not good enough. `PI_SUBAGENTS_EXTEND_HELPER_PATH` overrides the
 binary path. `cargo build --release --manifest-path packages/helper/Cargo.toml` writes
 `packages/helper/target/release/pi-subagents-extend-helper`, which is what the tests execute;
 `pnpm run build:helper` additionally installs it as `packages/pi-plugin/bin/`, which is the path a
 loaded extension prefers and is gitignored. The two are kept apart on purpose: `bin/` belongs to
 the running extension, so a test run must not replace it.
 
-The extension resolves the binary in this order: `PI_SUBAGENTS_EXTEND_HELPER`, then
+The extension resolves the binary in this order: `PI_SUBAGENTS_EXTEND_HELPER_PATH`, then
 `packages/pi-plugin/bin/`, then the cargo artifact under `packages/helper/target/release/`. The
 last one exists so that a source checkout with the helper built but not copied still runs — that
 state is easy to reach, and without it every `bash` call is refused.

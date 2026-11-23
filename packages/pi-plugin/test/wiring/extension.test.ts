@@ -234,17 +234,17 @@ import { restoreState } from "../support.ts"
   )
   h.restore()
 
-  const previous = process.env.PI_SUBAGENTS_EXTEND_HELPER
-  process.env.PI_SUBAGENTS_EXTEND_HELPER = "/nonexistent/pi-subagents-extend-helper"
+  const previous = process.env.PI_SUBAGENTS_EXTEND_HELPER_PATH
+  process.env.PI_SUBAGENTS_EXTEND_HELPER_PATH = "/nonexistent/pi-subagents-extend-helper"
   const h2 = await handler({
     bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["src/**"], bash: { write: ["node harness.mjs"] } } }),
   })
   const missing = await h2.call("bash", { command: "node harness.mjs" })
   assert.equal(missing?.block, true, "no helper means no bash, even for a listed command")
-  assert.match(missing.reason, /build:helper/, "the denial says how to build the helper")
+  assert.match(missing.reason, /PI_SUBAGENTS_EXTEND_HELPER_PATH/, "the denial names the override that supplies a binary")
   h2.restore()
-  if (previous === undefined) delete process.env.PI_SUBAGENTS_EXTEND_HELPER
-  else process.env.PI_SUBAGENTS_EXTEND_HELPER = previous
+  if (previous === undefined) delete process.env.PI_SUBAGENTS_EXTEND_HELPER_PATH
+  else process.env.PI_SUBAGENTS_EXTEND_HELPER_PATH = previous
   console.log("  ok   writable/network 选项写进 spec；找不到 helper 时 fail closed")
 }
 

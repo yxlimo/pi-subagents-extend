@@ -141,8 +141,8 @@ import { restoreState } from "../support.ts"
     `#!/bin/sh\necho '{"landlock":{"kernel_abi":3,"required_abi":7,"supported":false,"reason":"kernel Landlock ABI is 3, but ABI 7 is required"},"network_namespace":true,"resolver_sockets":[]}'\nexit 76\n`,
   )
   chmodSync(fake, 0o755)
-  const previous = process.env.PI_SUBAGENTS_EXTEND_HELPER
-  process.env.PI_SUBAGENTS_EXTEND_HELPER = fake
+  const previous = process.env.PI_SUBAGENTS_EXTEND_HELPER_PATH
+  process.env.PI_SUBAGENTS_EXTEND_HELPER_PATH = fake
   const h = await handler({
     bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["src/**"], bash: { write: ["pnpm test"] } } }),
   })
@@ -150,8 +150,8 @@ import { restoreState } from "../support.ts"
   assert.equal(denied?.block, true, "an unsupported kernel denies bash")
   assert.match(denied.reason, /ABI 7 is required/, "the denial names the ABI the plugin needs")
   h.restore()
-  if (previous === undefined) delete process.env.PI_SUBAGENTS_EXTEND_HELPER
-  else process.env.PI_SUBAGENTS_EXTEND_HELPER = previous
+  if (previous === undefined) delete process.env.PI_SUBAGENTS_EXTEND_HELPER_PATH
+  else process.env.PI_SUBAGENTS_EXTEND_HELPER_PATH = previous
   console.log("  ok   内核 ABI 不足时 bash 被拒绝，文案说清缺的版本")
 }
 

@@ -48,7 +48,7 @@ extend:
         - git restore
         - rm -rf
   setup:
-    preExec: mkdir -p packages/pi-plugin/bin .test-state .pi/review-reports && cp /home/shay/extensions/pi-subagents-extend/packages/pi-plugin/bin/pi-subagents-extend-helper packages/pi-plugin/bin/
+    preExec: mkdir -p packages/pi-plugin/bin .test-state .pi/review-reports && cp /home/shay/extensions/pi-subagents-extend/packages/pi-plugin/bin/pi-subagents-extend-helper-* packages/pi-plugin/bin/
 ---
 
 You are reviewing the repository you are running inside: `pi-subagents-extend`, a pi extension that

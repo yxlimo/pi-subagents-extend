@@ -81,7 +81,7 @@ extend:
         - git restore
         - rm -rf
   setup:
-    preExec: mkdir -p packages/pi-plugin/bin .test-state && cp /home/shay/extensions/pi-subagents-extend/packages/pi-plugin/bin/pi-subagents-extend-helper packages/pi-plugin/bin/
+    preExec: mkdir -p packages/pi-plugin/bin .test-state && cp /home/shay/extensions/pi-subagents-extend/packages/pi-plugin/bin/pi-subagents-extend-helper-* packages/pi-plugin/bin/
 ---
 
 You are `coder`: the implementation subagent for `pi-subagents-extend`, a pi extension that confines a

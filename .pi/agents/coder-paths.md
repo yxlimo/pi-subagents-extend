@@ -14,7 +14,7 @@ extend:
   # `mise run setup:helper` cannot create it because that path is outside the write grant.
   # preExec runs unsandboxed at session start, which is exactly what it is for.
   setup:
-    preExec: mkdir -p packages/pi-plugin/bin .test-state && cp /home/shay/extensions/pi-subagents-extend/packages/pi-plugin/bin/pi-subagents-extend-helper packages/pi-plugin/bin/
+    preExec: mkdir -p packages/pi-plugin/bin .test-state && cp /home/shay/extensions/pi-subagents-extend/packages/pi-plugin/bin/pi-subagents-extend-helper-* packages/pi-plugin/bin/
   permissions:
     # Read the whole repository: judging a path means knowing who calls it.
     scope: ["."]
