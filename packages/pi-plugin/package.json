@@ -40,6 +40,9 @@
     "prepack": "cp -f ../../README.md ../../LICENSE .",
     "lint": "eslint ."
   },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "^1.4.0",
     "@eslint/js": "^10.0.1",
