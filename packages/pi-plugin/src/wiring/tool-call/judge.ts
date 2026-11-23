@@ -12,6 +12,7 @@ import { dependencyGateVerdict } from "../../dependencies.ts";
 import { expandPath, privatisedDirs, resolveComparable, underRoot } from "../../paths/index.ts";
 import { buildSpec, detectPnpmStore, describeHelper, dropSpecFile, helperPath, SANDBOX_DEVICE_PATHS, scratchDir, wrapInSandbox, writeSpecFile } from "../../sandbox/index.ts";
 import type { Wiring } from "../context.ts";
+import { originalCommand } from "./original-args.ts";
 import { bail, deny, pathToolVerdict, preview, writeBail } from "./paths.ts";
 
 /**
@@ -407,7 +408,12 @@ export const judgeToolCall = async ({
 	// 把后一类算进预算，会让一次参数写错就提前判死长任务。
 
 	if (event.toolName === "bash") {
-		const command = String((event.input as { command?: unknown })?.command ?? "").trim();
+		// pi 的 tool_call 处理器共用可变的 event.input：先注册的处理器改了它，后面的看到的是改过的
+		// 值，顺序由加载顺序决定。实测 rtk 把命令换成 `rtk <cmd>`，白名单记的是模型原本那条，于是
+		// 整个会话的 bash 全被拒。判定因此用 transcript 里模型原本那条命令（见 original-args.ts），
+		// 执行用当前值：同伴的改写留在沙箱内层照常生效。
+		const rewritten = String((event.input as { command?: unknown })?.command ?? "").trim();
+		const command = originalCommand(ctx, event.toolCallId) ?? rewritten;
 		const rule = w.policy.bash;
 		if (!rule) {
 			return bail(
@@ -541,7 +547,7 @@ export const judgeToolCall = async ({
 			specFile,
 		});
 		(event.input as { command?: string }).command = wrapInSandbox(
-			command,
+			rewritten,
 			specFile,
 			helper,
 			// helper 的「网络已隔离」提示每会话只值一次：本会话还没播报过就照常播报；

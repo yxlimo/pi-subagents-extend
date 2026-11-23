@@ -98,6 +98,8 @@ export interface HandlerOptions {
 	cwd?: string
 	/** Fake tool registry, for the schema-derived path-argument lookup. */
 	piTools?: Array<{ name: string; parameters?: unknown }>
+	/** Transcript entries (pi session-entry shape); wires ctx.sessionManager so the judge reads the model's own arguments. */
+	transcript?: unknown[]
 }
 
 /** What the tool_result handler returns: the content array, possibly patched. */

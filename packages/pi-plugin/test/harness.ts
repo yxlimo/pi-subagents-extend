@@ -169,7 +169,7 @@ type HandlerArgs = HandlerOptions & { rawBindings?: boolean }
 /**
  * Activate the extension with the given bindings env and return its tool_call handler.
  */
-async function handler({ bindings, rawBindings, cwd = workdir, piTools }: HandlerArgs = {}): Promise<Harness> {
+async function handler({ bindings, rawBindings, cwd = workdir, piTools, transcript }: HandlerArgs = {}): Promise<Harness> {
   const previous = process.env.PI_SUBAGENT_EXTENSION_BINDINGS
   if (bindings === undefined) delete process.env.PI_SUBAGENT_EXTENSION_BINDINGS
   else process.env.PI_SUBAGENT_EXTENSION_BINDINGS = rawBindings ? bindings : wrapDispatchBindings(bindings)
@@ -190,6 +190,9 @@ async function handler({ bindings, rawBindings, cwd = workdir, piTools }: Handle
 
   const aborts: string[] = []
   const ctx: SessionContext = { cwd, ui: { notify: (message: string) => ui.push(message) }, actions: { abort: () => aborts.push("abort") } }
+  // 判定读的是 transcript 里模型原本那条命令（event.input 会被处理器链改写）。只有用例显式给了
+  // transcript 才挂 sessionManager：旧宿主没有这条通道，判定要照常退回 event.input。
+  if (transcript) (ctx as SessionContext & { sessionManager: unknown }).sessionManager = { getBranch: () => transcript }
   if (handlers.session_start) {
     // session_start is async but only reports; flush it before returning.
     await handlers.session_start({ type: "session_start" }, ctx)
