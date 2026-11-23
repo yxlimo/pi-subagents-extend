@@ -8,7 +8,6 @@ inheritSkills: false
 # append, not replace: replace drops the <active_agent> tag, and this role's limits come
 # solely from the extend block below, which is only read once the role is identified.
 systemPromptMode: append
-subagentOnlyExtensions: /home/shay/extensions/pi-subagents-extend/.pi/agent-profiles/md-role.ts
 extend:
   # A fresh worktree has no helper binary: packages/pi-plugin/bin is gitignored, and
   # `mise run setup:helper` cannot create it once the sandbox is up. preExec runs

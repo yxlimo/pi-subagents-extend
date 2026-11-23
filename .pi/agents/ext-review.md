@@ -5,7 +5,6 @@ inheritSkills: false
 inheritProjectContext: true
 thinking: high
 tools: read, grep, find, ls, bash, write
-subagentOnlyExtensions: /home/shay/extensions/pi-subagents-extend/.pi/agent-profiles/md-role.ts, /home/shay/extensions/pi-subagents-extend/packages/pi-plugin/src/child-context.ts
 systemPromptMode: append
 extend:
   permissions:

@@ -29,14 +29,11 @@ The delegation rules themselves (how to write the brief, how to wait, one cwd, o
 
 ## Prerequisites
 
-The delegated agent must be able to load this extension. Choose one:
-
-- declare `subagentOnlyExtensions: /path/to/pi-subagents-extend/packages/pi-plugin/src/index.ts` in the agent definition's frontmatter (works for foreground and background subagents; recommended);
+The delegated agent must be able to load this extension:
 - the extension is installed globally (`~/.pi/agent/extensions/pi-subagents-extend`) and this delegation sets `async: true` (only background subagents use ambient discovery).
 
 Without the extension loaded, passing bindings does nothing: no interception happens.
 
-A role md loads the extension through the md-role loader (`.pi/agent-profiles/md-role.ts`, which passes no profile name), so listing `…/src/index.ts` beside it is not needed (see [Area roles](#area-roles-one-md-per-code-area-policy-inside-the-md)).
 If the project uses the `<!-- main-agent-only:start -->` marker, add `, …/src/child-context.ts` to the same line, otherwise the subagent reads the main-agent-only sections (see skill `pi-subagents-extend-context`).
 
 Allowlisted commands run under the sandbox helper (the Rust binary in `packages/helper`): the file scope is enforced by Landlock, the network is off by default (all outbound TCP/UDP is cut and DNS resolution fails, but loopback works inside the sandbox, so a local server can be started and reached), and processes and capabilities are isolated as well (the host processes are invisible, the command has no capability at all). The host needs Landlock ABI 7 (Linux 6.15+); when the helper is missing or the kernel is too old, bash stays disabled (the remaining features are unaffected).
@@ -195,10 +192,8 @@ One file holds the area's write grant, its allowlist, its budget and the one com
 the work, and a dispatch to that role needs only `agent`, `model` and `task`; a per-dispatch
 `extensionBindings` payload narrows one task further on top of that default.
 
-The mechanism: the extension is loaded by a loader that passes **no** profile name
-(`.pi/agent-profiles/md-role.ts`, which is just `export default activate`), declared in the role
-md's `subagentOnlyExtensions`. Nothing reads a bindings file; the reader recomputes the policy
-from the merged fields, so a md that supplies `scope` produces an active policy with no other
+The mechanism: nothing reads a bindings file; the reader recomputes the policy from the merged fields,
+so a md that supplies `scope` produces an active policy with no other configuration at all.
 A dispatch that carries neither bindings nor a role md with an `extend`
 block leaves the extension loaded and inactive — fail open. A md that **exists and declares
 an `extend` block but cannot be applied** — unreadable file, invalid YAML, `extend` not an

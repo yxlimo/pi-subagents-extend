@@ -42,16 +42,15 @@ If the helper is missing or does not match the platform, a session with `bash` e
 starts — it names the path the package carries and the `PI_SUBAGENTS_EXTEND_HELPER_PATH` override,
 rather than waiting for the first `bash` call to fail.
 
-A role is declared in the agent's own markdown: `subagentOnlyExtensions` names the md-role loader, and
-the `extend` block carries its policy. `.pi/agents/` in this repository has ten working examples —
+A role is declared in the agent's own markdown: the `extend` block carries its policy. `.pi/agents/` in
+this repository has ten working examples —
 `coder-bash.md` is the shortest one to copy.
 
 ```markdown
 ---
 name: worker
 description: Implements a task within the given scope
-systemPromptMode: append  # replace drops the <active_agent> tag the loader reads
-subagentOnlyExtensions: /path/to/pi-subagents-extend/.pi/agent-profiles/md-role.ts
+systemPromptMode: append  # replace drops the <active_agent> tag the extension reads
 extend:
   permissions:
     scope: ["src/auth/**"]

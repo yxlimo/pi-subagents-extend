@@ -74,7 +74,7 @@ Two, and either can stand alone:
   `PI_SUBAGENT_EXTENSION_BINDINGS`; the extension reads that variable once at activation, because
   it exists only until a foreground subagent's session starts and is then restored.
 - **The role md**, the per-role default declared in the role's own agent definition
-  (`.pi/agents/<role>.md`, `extend:` block) and loaded through the md-role loader. See [Role defaults](#role-defaults).
+  (`.pi/agents/<role>.md`, `extend:` block). See [Role defaults](#role-defaults).
 
 A dispatch's `extensionBindings` and the role md's `extend.permissions` block use the same fields under different spellings: the dispatch nests them under `permissions` and spells the write scope `writeScope`, the deny budgets `maxDenies` / `maxWriteDenies`, plus the dispatch-only `maxReads`; the role md spells the write scope `write` and the budgets `budgets.deny` / `budgets.writeDeny`. `worktree` is a sibling of `permissions` in a dispatch, never a field inside it; the role md also keeps `worktree` as a separate block. Those spellings are not interchangeable. `setup` and `output` in a dispatch are ignored with a warning; put `setup.preExec` and `output.deliverable` in the role md.
 Without either, the extension does nothing: no scope, no refusals, no side effects.
@@ -127,7 +127,6 @@ definition, `.pi/agents/<role>.md`, under an `extend:` block:
 ```markdown
 ---
 name: writer
-subagentOnlyExtensions: /path/to/pi-subagents-extend/.pi/agent-profiles/md-role.ts
 extend:
   permissions:
     scope: ["."]
@@ -138,9 +137,8 @@ extend:
 ---
 ```
 
-The extension is loaded by `.pi/agent-profiles/md-role.ts` (`export default activate`), which
-passes no profile name; the reader recomputes the policy from the md's merged fields, so a md that
-supplies `scope` produces an active policy with no other configuration at all.
+The reader recomputes the policy from the md's merged fields, so a md that supplies `scope` produces
+an active policy with no other configuration at all.
 
 Merging runs over two layers, and the direction is one way: role md → dispatch.
 

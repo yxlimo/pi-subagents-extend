@@ -292,11 +292,11 @@ function main() {
 
 	if (problems.length > 0) {
 		console.error(
-			`\n${problems.length} role md problem(s) — a dead write grant refuses every write, a missing deny entry lets the role commit or push, and a missing loader path leaves the child unconfined:\n${problems.join("\n")}`,
+			`\n${problems.length} role md problem(s) — a dead write grant refuses every write, a missing deny entry lets the role commit or push:\n${problems.join("\n")}`,
 		);
 		process.exit(1);
 	}
-	console.log("\nrole config: every write grant is reachable, every deny list complete, every loader present");
+	console.log("\nrole config: every write grant is reachable, every deny list complete");
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();

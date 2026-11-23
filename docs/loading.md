@@ -35,9 +35,8 @@ configured, and `pi -e <source>` tries a source for one invocation.
 | `src/main-skills.ts` (part of `index.ts`) | ambient, main session only | the subagent-only skill filter on the prompt the parent sends |
 
 A subagent's own confinement does **not** depend on the parent being loaded: the role md names
-`child-context.ts` and the md-role loader by absolute path in `subagentOnlyExtensions`, so the child
-loads them whether or not the parent has this package. The parent-side features above are the ones that
-quietly do nothing.
+`child-context.ts` by absolute path in `subagentOnlyExtensions`, so the child loads it whether or not
+the parent has this package. The parent-side features above are the ones that quietly do nothing.
 
 ## Installing
 

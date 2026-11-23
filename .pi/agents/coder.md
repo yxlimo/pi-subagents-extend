@@ -12,7 +12,6 @@ model: buddy/coder-d
 # both is fatal, because a declared tool that never registered is itself a run error. This role md's
 # extend block bounds this child instead: the judging layer refuses every tool that is not a known path
 # tool, a safe tool, or allowlisted.
-subagentOnlyExtensions: /home/shay/extensions/pi-subagents-extend/.pi/agent-profiles/md-role.ts, /home/shay/extensions/pi-subagents-extend/packages/pi-plugin/src/child-context.ts
 systemPromptMode: append
 extend:
   permissions:

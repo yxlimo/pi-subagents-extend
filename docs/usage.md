@@ -252,7 +252,6 @@ under an `extend:` block:
 ```markdown
 ---
 name: review
-subagentOnlyExtensions: /path/to/pi-subagents-extend/.pi/agent-profiles/md-role.ts
 extend:
   permissions:
     scope: ["."]
@@ -265,10 +264,9 @@ extend:
 
 The `extend.permissions` block uses the same fields as the dispatch in the role md's spellings —
 the write scope is `write`, the deny budgets are `budgets.deny` / `budgets.writeDeny`; a dispatch
-spells them `writeScope`, `maxDenies` and `maxWriteDenies`. The extension is loaded by
-`.pi/agent-profiles/md-role.ts` (`export default activate`), which passes no profile name: the
-reader recomputes the policy from the md's merged fields, so a md that supplies `scope` produces an
-active policy with no other configuration at all.
+spells them `writeScope`, `maxDenies` and `maxWriteDenies`. The reader recomputes the policy from the
+md's merged fields, so a md that supplies `scope` produces an active policy with no other configuration
+at all.
 
 Two layers, one direction — role md → dispatch:
 
