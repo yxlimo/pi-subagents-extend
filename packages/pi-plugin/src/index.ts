@@ -95,6 +95,9 @@ export function activate(pi: ExtensionAPI, options: ActivateOptions = {}) {
 	// 已在本会话注册过就退出：第二份 handler 会把第一份包装过的命令再判一遍（见 ACTIVATION_MARK）。
 	// 宿主若给了不可写的 api 对象，就按没有闸门继续 —— 少一层去重比整个扩展不激活好。
 	try {
+		// SAFETY: `pi` is the host's ExtensionAPI object; the only key read or written through this cast
+		// is our own `Symbol.for` one, which no host type declares. No other property is touched, and a
+		// host that rejects the write lands in the catch below.
 		const marked = pi as unknown as Record<symbol, unknown>;
 		if (marked[ACTIVATION_MARK]) return;
 		marked[ACTIVATION_MARK] = true;
