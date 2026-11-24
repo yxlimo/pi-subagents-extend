@@ -354,3 +354,19 @@ identical in the log.
 24.04 turned out to run a 7.0 kernel as well, so the two namespace legs differ in image, kernel build
 and flavour (aws against azure) rather than in kernel generation. 6.8 is the only older kernel on
 offer, and at ABI 4 it cannot run the sandbox at all — that leg tests the refusal.
+
+## Checking a published install
+
+CI builds and publishes from the working tree, so nothing there can tell you what a user gets after
+`pi install`. `mise run verify:install` (needs network) installs the current version into an empty
+`PI_CODING_AGENT_DIR` and checks the copy that landed: the version it asked for is the version it
+got, the settings entry pins it, both helper binaries are present under the names the resolver
+looks for, the native one answers `--describe` with a usable Landlock ABI, no `test/` shipped, and
+the shipped `src/` equals this checkout byte for byte.
+
+That last comparison only runs when the checkout sits exactly on `v<version>`; on an ordinary working
+tree — which is ahead of the last release by definition — the line degrades to a note saying the
+comparison did not happen. The difference matters: "matches" is a claim, "not compared" is not.
+
+Run it from the tagged commit when verifying a release: only there does the comparison above say
+anything, and only there is a red line about the tarball a statement about what users install.
