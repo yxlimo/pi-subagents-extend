@@ -6,6 +6,7 @@ thinking: high
 inheritProjectContext: true
 inheritSkills: false
 systemPromptMode: append
+subagentOnlyExtensions: /home/shay/.pi/agent/npm/node_modules/pi-subagents-extend/src/index.ts, /home/shay/.pi/agent/npm/node_modules/pi-subagents-extend/src/child-context.ts
 extend:
   setup:
     preExec: mkdir -p packages/pi-plugin/bin .test-state && cp /home/shay/extensions/pi-subagents-extend/packages/pi-plugin/bin/pi-subagents-extend-helper-* packages/pi-plugin/bin/

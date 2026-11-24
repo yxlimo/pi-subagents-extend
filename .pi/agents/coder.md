@@ -13,6 +13,7 @@ model: buddy/coder-d
 # extend block bounds this child instead: the judging layer refuses every tool that is not a known path
 # tool, a safe tool, or allowlisted.
 systemPromptMode: append
+subagentOnlyExtensions: /home/shay/.pi/agent/npm/node_modules/pi-subagents-extend/src/index.ts, /home/shay/.pi/agent/npm/node_modules/pi-subagents-extend/src/child-context.ts
 extend:
   permissions:
     scope: ["."]

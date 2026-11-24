@@ -9,6 +9,7 @@ inheritSkills: false
 # role wants. replace would make this body the whole system prompt. Either way pi-subagents
 # prepends the <active_agent> tag, so the role is identified in both.
 systemPromptMode: append
+subagentOnlyExtensions: /home/shay/.pi/agent/npm/node_modules/pi-subagents-extend/src/index.ts, /home/shay/.pi/agent/npm/node_modules/pi-subagents-extend/src/child-context.ts
 extend:
   # A fresh worktree has no helper binary: packages/pi-plugin/bin is gitignored, and
   # `mise run setup:helper` cannot create it because that path is outside the write grant.

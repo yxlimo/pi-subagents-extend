@@ -6,6 +6,7 @@ inheritProjectContext: true
 thinking: high
 tools: read, grep, find, ls, bash, write
 systemPromptMode: append
+subagentOnlyExtensions: /home/shay/.pi/agent/npm/node_modules/pi-subagents-extend/src/index.ts, /home/shay/.pi/agent/npm/node_modules/pi-subagents-extend/src/child-context.ts
 extend:
   permissions:
     scope: ["."]
