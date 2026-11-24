@@ -335,48 +335,6 @@ const rc = (await import(join(repo, "src", "role-config.ts"))) as unknown as typ
   console.log("  ok   /permission prints the legacy line only when a legacy column is set")
 }
 
-// 261. A project .pi/subagent-bindings.json warns once per process about the compat layer.
-{
-  const proj = join(workdir, "compat-bindings-258")
-  mkdirSync(join(proj, ".pi"), { recursive: true })
-  writeFileSync(join(proj, ".pi/subagent-bindings.json"), "{}")
-  const first = await handler({ cwd: proj })
-  const warns = first.ui.filter((m) => m.includes("older configuration layer"))
-  assert.equal(warns.length, 1, "one compat warning naming the bindings file")
-  assert.match(warns[0], /\.pi\/subagent-bindings\.json/, "the file is named")
-  assert.match(warns[0], /extend:/, "the md extend block is named as the new home")
-  assert.match(warns[0], /is now ignored/, "it says the old file is ignored")
-  first.restore()
-
-  const second = await handler({ cwd: proj })
-  assert.equal(second.ui.filter((m) => m.includes("older configuration layer")).length, 0, "a second session_start is silent")
-  second.restore()
-  console.log("  ok   a project .pi/subagent-bindings.json warns once per process")
-}
-
-// 262. .pi/agent-profiles/*.ts warns once; a project with neither warns nothing.
-{
-  const proj = join(workdir, "compat-profiles-258")
-  mkdirSync(join(proj, ".pi/agent-profiles"), { recursive: true })
-  writeFileSync(join(proj, ".pi/agent-profiles/x.ts"), "export default {}")
-  const first = await handler({ cwd: proj })
-  const warns = first.ui.filter((m) => m.includes("older configuration layer"))
-  assert.equal(warns.length, 1, "one compat warning naming the profiles directory")
-  assert.match(warns[0], /agent-profiles/, "the directory is named")
-  assert.match(warns[0], /extend:/, "the md extend block is named as the new home")
-  first.restore()
-
-  const second = await handler({ cwd: proj })
-  assert.equal(second.ui.filter((m) => m.includes("older configuration layer")).length, 0, "a second session_start is silent")
-  second.restore()
-
-  const bare = join(workdir, "compat-none-258")
-  mkdirSync(bare, { recursive: true })
-  const clean = await handler({ cwd: bare })
-  assert.equal(clean.ui.filter((m) => m.includes("older configuration layer")).length, 0, "no compat file means no warning")
-  clean.restore()
-  console.log("  ok   .pi/agent-profiles warns once; a project with neither is silent")
-}
 
 // 263. A dispatch carrying a foreign /2 binding key warns once with both keys.
 {

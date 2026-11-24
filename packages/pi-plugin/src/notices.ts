@@ -5,24 +5,15 @@
  * 模块拆分第五步：以下声明从 index.ts 原样搬出，行为不变。
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
-import { relative, resolve } from "node:path";
+import { relative } from "node:path";
 import { allEntries, classifyCommand, commandNeedsNoManifest, firstToken, leadingAssignments, listedJoin, MAX_LISTED, unreachableEntries, type BashRule, type UnreachableEntry } from "./bash/index.ts";
-import { mainRepoRoot } from "./deliverable.ts";
 
-/** 旧一代 bindings 文件的位置（相对会话 cwd），仅用于兼容层提示。 */
-export const PROFILE_FILE = ".pi/subagent-bindings.json";
-
-/** 老一代 agent profile 目录（相对会话 cwd），仅用于兼容层提示。 */
-const AGENT_PROFILES_DIR = ".pi/agent-profiles";
 
 /** worktree 默认值依赖的角色 md：确认未被 git 跟踪的只提示一次（session_start 清空）。 */
 export const reportedUntrackedWorktreeProfiles = new Set<string>();
 /** 迁移告警：legacy bash.read / bash.write 只说一次（session_start 清空）。 */
 export const warnedLegacyBashColumns = new Set<string>();
 
-/** 兼容层文件提示按绝对路径去重，整进程只说一次；不在 session_start 清空。 */
-const warnedCompatLayer = new Set<string>();
 
 /** 沙箱注解的前缀：与 `sandbox-note.ts` 里的注解同一个标记。 */
 const SANDBOX_MARK = "[sandbox]";
@@ -213,39 +204,6 @@ export function warnLegacyBashColumns(config: Record<string, unknown> | undefine
 	);
 }
 
-/**
- * 老的 .pi 配置文件还在时各提示一次：它们已被忽略，也不会再被读取；配置写在角色 md 的 extend 块。
- * worktree 的 cwd 里没有主检出的配置，所以主检出根和 cwd 都查；两个文件路径只认普通文件，
- * 目录会让 existsSync 为真；老一代 profile 目录本身就是一个目录，由下面的 existsSync 分支单独判。
- */
-export function warnCompatLayer(cwd: string, warn: ((message: string) => void) | undefined): void {
-	const isFile = (path: string): boolean => {
-		try {
-			return statSync(path).isFile();
-		} catch {
-			return false;
-		}
-	};
-	const anchor = mainRepoRoot(cwd);
-	const roots = anchor.root === null ? [cwd] : [...new Set([cwd, anchor.root])];
-	for (const root of roots) {
-		const bindingsFile = resolve(root, PROFILE_FILE);
-		if (isFile(bindingsFile) && !warnedCompatLayer.has(bindingsFile)) {
-			warnedCompatLayer.add(bindingsFile);
-			warn?.(
-				`pi-subagents-extend: ${PROFILE_FILE} is from the older configuration layer and is now ignored; put configuration in the role md's extend: block.`
-			);
-		}
-		// 目录按目录判：老一代 profile 目录本身就是一个目录，不能套用上面的 isFile。
-		const profilesDir = resolve(root, AGENT_PROFILES_DIR);
-		if (existsSync(profilesDir) && !warnedCompatLayer.has(profilesDir)) {
-			warnedCompatLayer.add(profilesDir);
-			warn?.(
-				`pi-subagents-extend: ${AGENT_PROFILES_DIR}/*.ts is from the older configuration layer and is now ignored; put configuration in the role md's extend: block.`
-			);
-		}
-	}
-}
 /**
  * 补 worktree 默认值时，若默认值来自角色 md 而该文件没被 git 跟踪，告诉父代理一次：
  * worktree 副本里不会有这份 md，子代理认不出自己的角色，也就没有任何角色策略

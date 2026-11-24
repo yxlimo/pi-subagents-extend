@@ -1,5 +1,5 @@
 import type { ExtensionContext, SessionStartEvent } from "@earendil-works/pi-coding-agent";
-import { reportUnreachableEntries, reportedUntrackedWorktreeProfiles, warnCompatLayer, warnLegacyBashColumns, warnedLegacyBashColumns } from "../notices.ts";
+import { reportUnreachableEntries, reportedUntrackedWorktreeProfiles, warnLegacyBashColumns, warnedLegacyBashColumns } from "../notices.ts";
 import { bindingKey } from "../role-config.ts";
 import { bashBlocker, detectPnpmStore, helperPath, reportedHiddenGrants } from "../sandbox/index.ts";
 import type { ActivateOptions, Wiring } from "./context.ts";
@@ -30,7 +30,6 @@ export async function wireSessionStart(w: Wiring, _options: ActivateOptions, _ev
 		ui?.notify?.(message, "warning");
 	};
 	const cwd = ctx.cwd ?? process.cwd();
-	warnCompatLayer(cwd, w.uiWarning);
 	warnLegacyBashColumns(w.call.config, `extensionBindings ${bindingKey()}`, w.uiWarning);
 	if (!w.policy.active) return;
 	const budget = w.policy.maxReads > 0 ? `, read budget ${w.policy.maxReads}` : "";
