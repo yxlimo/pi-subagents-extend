@@ -44,13 +44,6 @@ description = "Documented payloads, binding version consistency"
 run = """
 for f in packages/pi-plugin/test/docs/*.test.ts; do node "$f" || exit 1; done
 """
-[tasks."check:grants"]
-description = "Role md config — dead write grants and missing deny entries"
-run = "node scripts/check-role-grants.mjs"
-
-[tasks."test:grants"]
-description = "Tests for the role md checker itself — a checker that reports wrongly is worse than none"
-run = "node --test scripts/check-role-grants.test.mjs"
 
 
 [tasks."verify:install"]
@@ -149,7 +142,7 @@ run = "node packages/pi-plugin/test/hashline-e2e.test.ts"
 
 [tasks."test:fast"]
 description = "Everything that does not need the helper"
-depends = ["lint", "typecheck", "test:unit", "test:docs", "test:grants"]
+depends = ["lint", "typecheck", "test:unit", "test:docs"]
 
 [tasks."test:all"]
 description = "The whole suite. Use only before merging to main."

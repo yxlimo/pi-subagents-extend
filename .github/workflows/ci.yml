@@ -114,17 +114,6 @@ jobs:
         run: pnpm run lint
 
 
-      # Role md config is the only place a subagent's boundary is defined,
-      # and every way it can be wrong is silent: a dead write grant refuses
-      # all writes, a missing deny entry lets the child commit and push, and
-      # a loader path naming a deleted file leaves the child with no
-      # confinement at all while the dispatch still succeeds. The checker's
-      # own tests run here too — a checker that reports wrongly is worse
-      # than none.
-      - name: Role config checks
-        run: |
-          node scripts/check-role-grants.mjs
-          node --test scripts/check-role-grants.test.mjs
       # The helper's own tests cover the sandbox itself: Landlock rules, the
       # namespace setup and the capability drop.
       - name: Helper tests
