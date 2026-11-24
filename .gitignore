@@ -10,5 +10,3 @@ packages/pi-plugin/.test-*
 .test-state/
 # 内部文档：开发日志、实测记录，不对外
 docs/internal/
-# review 角色的报告落在仓库内（/tmp 在沙箱里是不可写的私有 tmpfs）
-.pi/review-reports/
