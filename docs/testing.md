@@ -174,8 +174,6 @@ globally — `pi install npm:pi-subagents-extend` in `~/.pi/agent/settings.json`
 behaviour you observe belong to that version. Verifying a checkout change therefore means one of:
 
 - run the e2e suite for the area (fixtures declare the checkout), or
-- temporarily point a role md's `subagentOnlyExtensions` at the checkout and dispatch, then put it
-  back, or
 - `pi install` the local package and accept that the checkout is what the machine runs.
 
 Reading a green refusal as proof of an unshipped change is the mistake this section exists to
