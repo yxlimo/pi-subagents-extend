@@ -125,6 +125,13 @@ jobs:
             echo "::error::the tarball carries test/"
             exit 1
           fi
+          # Consumer repos run the checker from the installed package. A tarball
+          # without it leaves their role mds unchecked — the failure that once
+          # shipped four dead loader paths.
+          grep -qx 'package/scripts/check-role-grants.mjs' /tmp/entries || {
+            echo "::error::the role-config checker is missing"
+            exit 1
+          }
           echo "tarball files: $(wc -l < /tmp/entries)"
 
       # --provenance records this workflow, repo and commit in the public
