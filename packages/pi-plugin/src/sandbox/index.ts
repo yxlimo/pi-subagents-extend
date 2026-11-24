@@ -8,5 +8,5 @@
  * 语义上仍是纯推导）外不持有会话状态；index.ts 只做接线。
  */
 export { bashBlocker, describeHelper, describePnpmStore, detectPnpmStore, helperCandidates, helperPath, type HelperCapabilities } from "./helper.ts";
-export { reportHiddenGrants, reportedHiddenGrants, SANDBOX_DEVICE_PATHS, sandboxWritableDirs, setDeliverableTargetPath, stateDir, toolchainCacheDir } from "./grants.ts";
+export { observedWriteRoots, reportHiddenGrants, reportedHiddenGrants, SANDBOX_DEVICE_PATHS, sandboxWritableDirs, setDeliverableTargetPath, stateDir, toolchainCacheDir } from "./grants.ts";
 export { buildSpec, dropSpecFile, scratchDir, sweepStaleSpecFiles, wrapInSandbox, writeSpecFile } from "./spec.ts";

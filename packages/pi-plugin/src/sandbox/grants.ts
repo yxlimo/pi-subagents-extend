@@ -187,6 +187,23 @@ function writablePaths(policy: Policy, cwd: string): string[] {
 	return [...paths];
 }
 
+/**
+ * 探针要观察的目录：写范围本身（外加显式的 writablePaths）。
+ *
+ * 只给写范围，不给 sandboxWritableDirs 的那一整份清单 —— 那里有 .git、node_modules、
+ * 工具链缓存，把它们逐个目录挂 inotify 既贵又不说明问题：问题是「任务有没有在产出」，
+ * 而产出落在写范围里。只为**存在**的目录挂 watch，所以一个还没建出来的写范围不产生
+ * 证据，helper 的 `watched: 0` 如实说这件事。
+ */
+export function observedWriteRoots(policy: Policy, cwd: string, rule: BashRule): string[] {
+	const roots = new Set(writablePaths(policy, cwd));
+	for (const raw of rule.writablePaths) {
+		const abs = expandPath(cwd, raw);
+		if (abs && existsSync(abs)) roots.add(abs);
+	}
+	return [...roots];
+}
+
 
 /**
  * 这个任务到底有没有写授权：写范围（writeScope，省略时等于 scope）、显式 writablePaths、

@@ -30,6 +30,19 @@ const INACTIVE: Policy = {
  * 这批变量；收进一个对象，是为了让处理器可以逐个搬出 index.ts 而不带走闭包。
  * 字段初始化就是 activate() 原来的声明序（见 createWiring）。
  */
+/**
+ * 一次 bash 调用留下的东西，结果回来时要用：写清单（判「写越界」的事实依据）、cwd、
+ * 是否离线、要清理的 spec 文件，以及 helper 观察结果的落点（只有探针开着时才有）。
+ */
+export interface SandboxSpecEntry {
+	write: string[];
+	cwd: string;
+	offline: boolean;
+	command: string;
+	specFile?: string;
+	observeFile?: string;
+}
+
 export interface WiringState {
 	/**
 	 * bindings 在激活时定格：前台子代理的 bindings 环境变量只在会话启动前存在，
@@ -51,10 +64,11 @@ export interface WiringState {
 	baseSource: string;
 	baseRequireScope: boolean;
 	baseBroken: boolean;
+
 	/** toolCallId → 这次 bash 的 spec 摘要（写清单、cwd、是否离线）。 */
 	sandboxSpecs: Map<
 		string,
-		{ write: string[]; cwd: string; offline: boolean; command: string; specFile?: string }
+		SandboxSpecEntry
 	>;
 	/**
 	 * helper 的「网络已隔离」提示每会话只播报一次：第一条离线命令照常播报，之后的
@@ -120,7 +134,7 @@ export function createWiring(): Wiring {
 		baseBroken: Boolean(call.error),
 		sandboxSpecs: new Map<
 			string,
-			{ write: string[]; cwd: string; offline: boolean; command: string; specFile?: string }
+			SandboxSpecEntry
 		>(),
 		sandboxNetworkNoticeAnnounced: false,
 		denyCounter: new DenyCounter(policy.maxDenies),

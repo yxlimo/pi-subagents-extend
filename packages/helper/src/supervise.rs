@@ -26,19 +26,25 @@ pub fn run(
     child_main: impl FnOnce() -> i32,
     fresh_proc: bool,
     stall: Option<u64>,
+    observation: Option<crate::watch::Observation>,
 ) -> Result<i32, String> {
     match unsafe { libc::fork() } {
         -1 => Err(format!(
             "cannot fork the sandbox init: {}",
             std::io::Error::last_os_error()
         )),
-        0 => supervisor(child_main, fresh_proc, stall),
+        0 => supervisor(child_main, fresh_proc, stall, observation),
         pid => Ok(decode(wait_for(pid)?)),
     }
 }
 
 /// The PID 1 of the new namespace: mount a fresh procfs, then supervise.
-fn supervisor(child_main: impl FnOnce() -> i32, fresh_proc: bool, stall: Option<u64>) -> ! {
+fn supervisor(
+    child_main: impl FnOnce() -> i32,
+    fresh_proc: bool,
+    stall: Option<u64>,
+    observation: Option<crate::watch::Observation>,
+) -> ! {
     // If the caller dies, the whole namespace must die with it, otherwise the
     // command is orphaned inside a namespace nobody can reach.
     unsafe {
@@ -65,6 +71,15 @@ fn supervisor(child_main: impl FnOnce() -> i32, fresh_proc: bool, stall: Option<
     // default dispositions have to be replaced with forwarding ones.
     for signal in [libc::SIGTERM, libc::SIGINT, libc::SIGHUP, libc::SIGQUIT] {
         unsafe { libc::signal(signal, forward as *const () as libc::sighandler_t) };
+    }
+
+    // 观察必须在命令 fork 之前挂好：写事件只有在 watch 建立之后才会入队，晚一步就漏掉
+    // 命令开头写的东西。drain 线程与此同时开始等待，所以命令退出时事件已经在缓冲区里。
+    let watch = observation
+        .as_ref()
+        .and_then(|observation| crate::watch::Watch::new(&observation.roots));
+    if let Some(watch) = &watch {
+        watch.start();
     }
 
     match unsafe { libc::fork() } {
@@ -97,6 +112,16 @@ fn supervisor(child_main: impl FnOnce() -> i32, fresh_proc: bool, stall: Option<
                     }
                 },
             };
+            // 观察结果在命令退出后交给调用方：`None` 表示这次根本没观察（没要求，
+            // 或内核不给 inotify 实例），`watched: 0` 表示根目录都不存在、空事件
+            // 说明不了任何事。两种情况都不能被误读成「没写过」。
+            if let Some(target) = observation.as_ref().map(|o| o.result.as_path()) {
+                let (wrote, watched) = match &watch {
+                    Some(watch) => (Some(watch.finish()), watch.dirs()),
+                    None => (None, 0),
+                };
+                crate::watch::write_result(target, wrote, watched);
+            }
             unsafe { libc::_exit(code) }
         }
     }

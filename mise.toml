@@ -12,14 +12,13 @@
 description = "Build the sandbox helper binary once"
 run = """
 helper="packages/pi-plugin/bin/pi-subagents-extend-helper-$(node -p 'process.platform+"-"+process.arch')"
-if [ ! -x "$helper" ]; then
-  cargo build --release --manifest-path packages/helper/Cargo.toml --locked &&
-  mkdir -p packages/pi-plugin/bin &&
-  cp packages/helper/target/release/pi-subagents-extend-helper "$helper"
-fi
+# 无条件构建：cargo 自己就是增量判断（源码没变时几十毫秒的 no-op），而早先的
+# `if [ ! -x "$helper" ]` 守卫会漏掉两种真实的失效——源码改了但二进制还在，
+# 以及二进制被删了而 mise 认为 sources 没变（于是什么都不做，留下一个不存在的文件）。
+cargo build --release --manifest-path packages/helper/Cargo.toml --locked &&
+mkdir -p packages/pi-plugin/bin &&
+cp packages/helper/target/release/pi-subagents-extend-helper "$helper"
 """
-sources = ["packages/helper/src/**/*.rs", "packages/helper/Cargo.toml"]
-
 
 [tasks.lint]
 description = "ESLint the plugin"

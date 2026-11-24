@@ -9,7 +9,7 @@ import { shouldDefaultWorktree, WORKTREE_TOOLS } from "../../worktree-default.ts
 import { agentMdDirs, BINDING_NAMESPACE, bindingKey, readExtendBlock, resolveAgentFile, worktreeFromBlock } from "../../role-config.ts";
 import { asObject, matches, type Policy } from "../../policy/index.ts";
 import { expandPath, privatisedDirs, resolveComparable, underRoot } from "../../paths/index.ts";
-import { buildSpec, detectPnpmStore, describeHelper, dropSpecFile, helperPath, SANDBOX_DEVICE_PATHS, scratchDir, wrapInSandbox, writeSpecFile } from "../../sandbox/index.ts";
+import { buildSpec, detectPnpmStore, describeHelper, dropSpecFile, helperPath, observedWriteRoots, SANDBOX_DEVICE_PATHS, scratchDir, wrapInSandbox, writeSpecFile } from "../../sandbox/index.ts";
 import type { Wiring } from "../context.ts";
 import { originalCommand } from "./original-args.ts";
 import { bail, deny, pathToolVerdict, preview } from "./paths.ts";
@@ -505,7 +505,10 @@ export const judgeToolCall = async ({
 			const reason = caps?.landlock.reason ?? "helper --describe returned no usable information";
 			return deny(`pi-subagents-extend: this kernel cannot enforce the task scope: ${reason}`);
 		}
-		const spec = buildSpec(cwd, rule, w.policy, w.uiWarning);
+		// 探针要判「这个代理还在干活吗」，写活动是其中一条证据，而这条证据只有内核给得准：
+		// 让 helper 在写范围上挂 inotify，结果写在 spec 旁边。没开探针就不付这份代价。
+		const watchRoots = w.probe ? observedWriteRoots(w.policy, cwd, rule) : undefined;
+		const spec = buildSpec(cwd, rule, w.policy, w.uiWarning, watchRoots);
 		const specFile = writeSpecFile(spec, event.toolCallId);
 		if (!specFile) {
 			return deny("pi-subagents-extend: cannot write the sandbox spec; check that ~/.cache/pi-subagents-extend is writable");
@@ -532,6 +535,8 @@ export const judgeToolCall = async ({
 			command,
 			offline: spec.offline,
 			specFile,
+			// 观察结果的落点与 spec 同名同目录：helper 自己按 `<spec>.observe` 写，这里只照着读。
+			observeFile: watchRoots?.length ? `${specFile}.observe` : undefined,
 		});
 		(event.input as { command?: string }).command = wrapInSandbox(
 			rewritten,

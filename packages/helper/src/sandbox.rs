@@ -162,6 +162,7 @@ mod tests {
             offline: true,
             env: Default::default(),
             stall_seconds: None,
+            watch: Vec::new(),
         };
         let error = apply(&spec, true).expect_err("a missing path must be refused");
         assert!(

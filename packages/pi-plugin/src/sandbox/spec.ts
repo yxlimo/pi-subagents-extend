@@ -148,7 +148,14 @@ export function reportCwdInsidePrivatisedTmp(cwd: string, rule: BashRule, warn?:
  * helper 只认绝对路径，这里给的都是 resolve 过的；路径不存在时 helper 会直接拒绝，
  * 所以不存在的可写目录要提前滤掉。
  */
-export function buildSpec(cwd: string, rule: BashRule, policy: Policy, warn?: (message: string) => void) {
+export function buildSpec(
+	cwd: string,
+	rule: BashRule,
+	policy: Policy,
+	warn?: (message: string) => void,
+	/** 要观察写的目录；只有探针开着才给，helper 据此在 spec 旁写回观察结果。 */
+	watchRoots?: string[],
+) {
 	const scratch = scratchDir(cwd, rule);
 	// 落在私有 tmpfs 之下的授权 helper 一律拒（整份 spec 连带 bash 一起死），所以在这里先剔掉：
 	// 授权与挂载互相抵消是父代理的配置问题，不该让一条命令整个跑不起来。
@@ -178,6 +185,9 @@ export function buildSpec(cwd: string, rule: BashRule, policy: Policy, warn?: (m
 		...(scratch === CONVENTIONAL_TMP ? {} : { tmp: scratch }),
 		write: kept,
 		offline: rule.network !== true,
+		// 观察目录也只在需要时出现，理由同下面一条：旧版 helper 见到未知键会拒掉整份 spec。
+		// helper 把观察结果写在 `<spec>.observe` 里，所以这里不需要携带结果路径。
+		...(watchRoots?.length ? { watch: watchRoots } : {}),
 		// 只在开启时写：spec 是 deny_unknown_fields，旧版 helper 拿到这个键会直接拒掉整份
 		// spec，所以关闭时必须连键都不出现。
 		...(rule.cpuStallSeconds === false ? {} : { stallSeconds: rule.cpuStallSeconds }),
@@ -231,6 +241,8 @@ export function dropSpecFile(entry: { specFile?: string } | undefined): void {
 	if (!entry?.specFile) return;
 	try {
 		rmSync(entry.specFile, { force: true });
+		// 观察结果与 spec 同生共死：留着它只会在 ~/.cache 里堆垃圾。
+		rmSync(`${entry.specFile}.observe`, { force: true });
 	} catch {
 		// 删不掉不影响判定，session_shutdown 的清扫会兜底。
 	}

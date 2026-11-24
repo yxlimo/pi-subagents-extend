@@ -48,6 +48,11 @@ pub struct Spec {
         skip_serializing_if = "Option::is_none"
     )]
     pub stall_seconds: Option<u64>,
+    /// Directories whose writes are observed, so the caller learns whether the command
+    /// actually changed anything — a question the kernel answers and no program table
+    /// can. Absent means no observation at all, which is the common case.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub watch: Vec<PathBuf>,
 }
 
 impl Spec {
@@ -60,6 +65,7 @@ impl Spec {
             .iter()
             .chain(spec.write.iter())
             .chain(spec.tmp.iter())
+            .chain(spec.watch.iter())
         {
             if path.is_absolute() {
                 if path.as_os_str().to_string_lossy().contains('\0') {
@@ -139,6 +145,21 @@ mod tests {
         let error = Spec::parse(r#"{"writable":"/work"}"#).expect_err("unknown keys are refused");
         assert!(
             error.contains("not valid JSON"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn watched_roots_parse_and_are_absolute() {
+        let spec = Spec::parse(r#"{"watch":["/work/src"]}"#).expect("a watch list is valid");
+        assert_eq!(spec.watch, vec![PathBuf::from("/work/src")]);
+        assert!(
+            Spec::parse("{}").expect("an empty spec is valid").watch.is_empty(),
+            "no watch list means no observation"
+        );
+        let error = Spec::parse(r#"{"watch":["src"]}"#).expect_err("relative roots are refused");
+        assert!(
+            error.contains("must be absolute"),
             "unexpected error: {error}"
         );
     }

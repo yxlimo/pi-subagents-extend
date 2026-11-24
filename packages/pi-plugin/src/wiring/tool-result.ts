@@ -1,5 +1,5 @@
 import type { ToolResultEvent, ToolResultEventResult } from "@earendil-works/pi-coding-agent";
-import { rmSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import { handoffHintFor, withHint } from "../handoff-hint.ts";
 import { unreachableCommandNote } from "../notices.ts";
 import { cpuStallNote, networkFailureNote, writeRefusalNote } from "../sandbox-note.ts";
@@ -33,6 +33,17 @@ export function annotateToolResult(w: Wiring, event: ToolResultEvent): ToolResul
 	const offline = w.policy.bash !== undefined && w.policy.bash.network !== true;
 	const ran = w.sandboxSpecs.get(event.toolCallId);
 	if (ran) {
+		// 内核有没有看到写：探针的「写活动」只有这一个来源（bash 命令不再自带读写身份）。
+		// 读不到就是没证据——旧版 helper 不写这份文件，被信号杀掉的命令也来不及写完。
+		// `watched: 0` 同样是没证据（写范围还不存在），不能当成「没写过」。
+		if (ran.observeFile && w.probe) {
+			try {
+				const observation = JSON.parse(readFileSync(ran.observeFile, "utf8")) as { wrote?: boolean | null };
+				if (observation.wrote === true) w.probe.noteWriteActivity();
+			} catch {
+				// 没有结果文件 = 没有证据，不猜。
+			}
+		}
 		w.sandboxSpecs.delete(event.toolCallId);
 		// helper 早已读过它；留着只会堆垃圾文件（每个 bash 调用一份）。
 		if (ran.specFile) {

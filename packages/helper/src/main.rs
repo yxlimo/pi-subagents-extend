@@ -30,6 +30,7 @@ mod namespace;
 mod sandbox;
 mod spec;
 mod supervise;
+mod watch;
 
 use std::ffi::OsString;
 use std::io::Read;
@@ -131,11 +132,28 @@ fn run_with_spec(args: &[OsString]) -> Result<i32, (i32, String)> {
         .split_first()
         .ok_or((EXIT_BAD_SPEC, "no command given after the spec".to_string()))?;
 
-    apply(program, program_args, &spec)
+    // 观察结果写在 spec 旁边：helper 自己知道 spec 的路径，所以「结果放哪」不必进 spec ——
+    // 那会让文件名和内容互相依赖（内容要写路径，路径要等写完才知道）。从 stdin 读 spec
+    // 时没有路径，也就没有观察。
+    let observation = if spec.watch.is_empty() || source == "-" {
+        None
+    } else {
+        Some(watch::Observation {
+            result: std::path::PathBuf::from(format!("{source}.observe")),
+            roots: spec.watch.clone(),
+        })
+    };
+
+    apply(program, program_args, &spec, observation)
 }
 
 /// Enter the namespaces, then run the command inside the sandbox.
-fn apply(program: &OsString, program_args: &[OsString], spec: &Spec) -> Result<i32, (i32, String)> {
+fn apply(
+    program: &OsString,
+    program_args: &[OsString],
+    spec: &Spec,
+    observation: Option<watch::Observation>,
+) -> Result<i32, (i32, String)> {
     // The mount and PID namespaces are what give the command a private scratch
     // space and hide the host's processes; the network namespace is only entered
     // for an offline command. A host can refuse all of them (some CI runners do),
@@ -209,6 +227,7 @@ fn apply(program: &OsString, program_args: &[OsString], spec: &Spec) -> Result<i
         || run_command(program, program_args, spec, namespaces),
         namespaces,
         spec.stall_seconds,
+        observation,
     )
     .map_err(|e| (EXIT_SANDBOX_FAILED, e))
 }
