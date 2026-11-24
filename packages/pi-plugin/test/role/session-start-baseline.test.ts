@@ -277,66 +277,8 @@ import "../support.ts"
   console.log("  ok   an unconfigured child warns that no configuration is in effect and it is unconstrained")
 }
 
-// 209–220. Role-config phase 2: the single bash.allow column, with read/write judged internally.
+// Phase 2: the single bash.allow column.
 
-// 209. commandAccess: every writer in the table classifies as write.
-{
-  const writers = [
-    "mkdir d", "cp a b", "mv a b", "rm f", "touch f", "chmod +x f", "chown u f",
-    "ln -s a b", "tee f", "dd if=a of=b", "truncate -s 0 f", "install a b", "rsync a b",
-    "sed -i s/a/b/ f", "sed --in-place s/a/b/ f",
-    "git add .", "git commit -m x", "git switch x", "git stash", "git init",
-    "git worktree add x", "git rm f", "git mv a b", "git apply p", "git cherry-pick x",
-    "git merge x", "git rebase x", "git tag v1",
-    "pnpm install", "npm add x", "yarn remove x", "bun uninstall x", "pnpm update", "npm ci", "pnpm test",
-    "node a.mjs", "python a.py", "python3 a.py", "sh a.sh", "bash a.sh", "zsh a.sh",
-    "ruby a.rb", "perl a.pl",
-  ]
-  for (const cmd of writers) {
-    assert.equal(bashApi.commandAccess(cmd, true), "write", `writer must be write: ${cmd}`)
-  }
-  console.log("  ok   commandAccess puts every writer in the write class")
-}
-
-// 210. commandAccess: readers, unknown programs and non-writing subcommands stay read.
-{
-  const readers = [
-    "cat f", "ls", "rg x", "find .", "grep x f", "head f", "tail f", "wc f", "file f",
-    "stat f", "diff a b", "cmp a b", "du .", "df .", "echo hi", "pwd", "which node", "type ls",
-    "git status", "git diff", "git log", "git show HEAD", "git rev-parse HEAD", "git branch",
-    "git remote -v", "git blame f", "git describe",
-    "frobnicate --things",
-  ]
-  for (const cmd of readers) {
-    assert.equal(bashApi.commandAccess(cmd, true), "read", `reader/unknown must be read: ${cmd}`)
-  }
-  console.log("  ok   commandAccess leaves readers, unknown programs and non-writing subcommands as read")
-}
-
-// 211. commandAccess peels assignments, wrappers and paths, and judges every chain segment.
-{
-  const peeled = [
-    "env rm x", "sudo rm x", "nice rm x", "timeout 5 rm x", "xargs rm x",
-    "/usr/bin/rm x", "./rm x", "FOO=1 rm x", "env FOO=1 rm x",
-  ]
-  for (const cmd of peeled) {
-    assert.equal(bashApi.commandAccess(cmd, true), "write", `peeled writer must be write: ${cmd}`)
-  }
-  assert.equal(bashApi.commandAccess("cat x; rm y", true), "write", "a chain with a writer writes")
-  assert.equal(bashApi.commandAccess("cat x && rm y", true), "write", "&& with a writer writes")
-  assert.equal(bashApi.commandAccess("cat x | grep y", true), "read", "an all-reader pipe stays read")
-  console.log("  ok   commandAccess peels assignments/wrappers/paths and scans every chain segment")
-}
-
-// 212. commandAccess honours the writable ceiling; isUnknownProgram names unlisted programs.
-{
-  assert.equal(bashApi.commandAccess("rm x", false), "read", "no write grant forces read for a writer")
-  assert.equal(bashApi.commandAccess("cat x; rm y", false), "read", "the ceiling wins even for a chain")
-  assert.equal(bashApi.isUnknownProgram("frobnicate x"), true, "a program outside both tables is unknown")
-  assert.equal(bashApi.isUnknownProgram("rm x"), false, "a listed writer is not unknown")
-  assert.equal(bashApi.isUnknownProgram("cat x"), false, "a listed reader is not unknown")
-  console.log("  ok   writable=false forces read; unknown programs are distinguishable")
-}
 
 // 213. parseBashRule takes the single allow column; a legacy-only config means no bash.
 {
@@ -350,44 +292,7 @@ import "../support.ts"
   console.log("  ok   parseBashRule reads the single allow column")
 }
 
-// 214. classifyCommand takes access from the allow entry; allEntries lists it.
-{
-  const allowed = bashApi.parseBashRule({ allow: ["rm w", "cat r", "frobnicate u"], writable: true })
-  assert.ok(allowed)
-  const w = bashApi.classifyCommand(allowed, "rm w")
-  assert.equal(w?.access, "write", "allow + writer program is write")
-  assert.equal(bashApi.classifyCommand(allowed, "cat r")?.access, "read", "allow + reader program is read")
-  const unknown = bashApi.classifyCommand(allowed, "frobnicate u")
-  assert.equal(unknown?.access, "read", "allow + unknown program is read")
-  assert.ok(unknown && bashApi.isUnknownProgram("frobnicate u"), "and the program is flagged unknown")
-  assert.deepEqual(bashApi.allEntries(allowed), ["rm w", "cat r", "frobnicate u"], "allow shows up in allEntries")
 
-  const ceiling = bashApi.parseBashRule({ allow: ["rm w"], writable: false })
-  assert.ok(ceiling)
-  assert.equal(bashApi.classifyCommand(ceiling, "rm w")?.access, "read", "writable:false ceilings an allow writer")
-  console.log("  ok   classifyCommand derives access from the program")
-}
-
-// 215. An allow-listed writer with writable:false is refused before spawn, on the write budget.
-{
-  const h = await handler({
-    bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["**"], bash: { allow: ["rm x"], writable: false }, maxWriteDenies: 1 },
-    }),
-  })
-  const input = { command: "rm x" }
-  const outcome = await h.call("bash", input)
-  assert.equal(outcome?.block, true, "the writer is refused")
-  assert.match(outcome?.reason ?? "", /the role may run this command/, "the allow grant is acknowledged")
-  assert.match(outcome?.reason ?? "", /bash\.writable: false gives no write access/, "the cause is named")
-  assert.match(outcome?.reason ?? "", /Write refusal 1 in a row/i, "it counts on the write budget")
-  assert.equal(input.command, "rm x", "the command is not rewritten, so nothing was spawned")
-  await h.commands["permission"].handler("", { cwd: workdir, ui: { notify: (m) => h.ui.push(m) } })
-  assert.match(h.ui.at(-1) ?? "", /write denials: 1\/1/, "the write budget was consumed")
-  assert.match(h.ui.at(-1) ?? "", /read denials: 0\//i, "the grant budget was untouched")
-  h.restore()
-  console.log("  ok   allow + writer + writable:false is a write-budget refusal before spawn")
-}
 
 // 216. An allow-listed reader runs through the sandbox like any bash call.
 {
@@ -405,22 +310,21 @@ import "../support.ts"
 // 217. The md's permissions.bash accepts the new keys and reports bad/unknown ones.
 {
   const good = rc.policyFromBlock({
-    permissions: { scope: ["."], bash: { allow: ["cat f", "rm x"], deny: ["rm f"], writable: true, network: false } },
+    permissions: { scope: ["."], bash: { allow: ["cat f", "rm x"], deny: ["rm f"], network: false } },
   })
   assert.deepEqual(good.problems, [], "a well-formed bash block is accepted")
   assert.deepEqual(good.policy?.bash, {
-    allow: ["cat f", "rm x"], deny: ["rm f"], writable: true, network: false,
+    allow: ["cat f", "rm x"], deny: ["rm f"], network: false,
   }, "the bash keys map onto the role policy")
 
   const bad = rc.policyFromBlock({
-    permissions: { scope: ["."], bash: { allow: "cat f", writable: "yes", mystery: 1 } },
+    permissions: { scope: ["."], bash: { allow: "cat f", mystery: 1 } },
   })
   assert.ok(bad.problems.some((p) => p.includes("permissions.bash.allow")), "a non-array allow is reported")
-  assert.ok(bad.problems.some((p) => p.includes("permissions.bash.writable")), "a non-boolean writable is reported")
   assert.ok(bad.problems.some((p) => p.includes("mystery")), "unknown keys are still reported")
   assert.equal(bad.policy?.bash?.allow, undefined, "a bad allow is omitted")
 
-  console.log("  ok   md permissions.bash takes allow/deny/writable/network and reports bad keys")
+  console.log("  ok   md permissions.bash takes allow/deny/network and reports bad keys")
 }
 
 // 218. md permissions.bash.allow reaches a child session and gates bash end to end.
@@ -428,7 +332,7 @@ import "../support.ts"
   const home = join(workdir, "role-home-218")
   const md = join(home, ".agents", "md-bash-coder.md")
   mkdirSync(dirname(md), { recursive: true })
-  writeFileSync(md, '---\nextend:\n  permissions:\n    scope: ["**"]\n    bash:\n      allow: ["cat src/auth/x.ts"]\n      writable: false\n---\n# md-bash-coder\n')
+  writeFileSync(md, '---\nextend:\n  permissions:\n    scope: ["**"]\n    bash:\n      allow: ["cat src/auth/x.ts"]\n---\n# md-bash-coder\n')
   const proj = join(workdir, "role-proj-218")
   mkdirSync(join(proj, "src", "auth"), { recursive: true })
   const run = await childRun({ cwd: proj, home, systemPrompt: '<active_agent name="md-bash-coder"/>\nhello' })
@@ -440,23 +344,4 @@ import "../support.ts"
 }
 
 
-// 220. A failed write by an allow-listed unknown program explains that it ran read-only.
-{
-  const h = await handler({
-    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["**"], bash: { allow: ["frobnicate"] } } }),
-  })
-  const input = { command: "frobnicate" }
-  assert.equal(await h.call("bash", input), undefined, "the unknown program is allowlisted and runs")
-  const target = `/var/tmp/pi-extend-${process.pid}/out.txt`
-  const outcome = await h.result("bash", `error: cannot write '${target}': Permission denied`, true)
-  const content: unknown = outcome?.content
-  const text = typeof content === "string" ? content : Array.isArray(content) ? content.map((part) => (part as { text?: string }).text ?? "").join("\n") : ""
-  assert.match(text, /outside the writes the parent granted/, "the ordinary write-refusal note is present")
-  assert.match(text, /could not tell that this program writes, so it was not treated as a write/, "the read-only cause sentence is corrected")
-  assert.doesNotMatch(text, /ran read-only/, "it no longer claims the program ran read-only")
-  assert.match(text, /ask for bash\.writable: true/, "a role without the ceiling is asked for the ceiling")
-  assert.doesNotMatch(text, /ask for writablePaths/, "and not for writablePaths it cannot use")
-  h.restore()
-  console.log("  ok   a failed write by an unknown allow-listed program explains the ceiling, not a read-only run")
-}
 

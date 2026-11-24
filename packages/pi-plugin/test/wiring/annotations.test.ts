@@ -8,7 +8,7 @@
 //   node test/extension.test.ts
 
 import assert from "node:assert/strict"
-import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { spawnSync } from "node:child_process"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -216,7 +216,7 @@ if (described?.landlock?.supported) {
   )
 
   const offlineHandler = await handler({
-    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["**"], bash: { allow: ["sh netprobe.sh"], writable: true } } }),
+    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["**"], writeScope: ["**"], bash: { allow: ["sh netprobe.sh"] } } }),
   })
   const input = { command: "sh netprobe.sh" }
   assert.equal(await offlineHandler.call("bash", input), undefined, "the probe is allowlisted")
@@ -257,7 +257,7 @@ if (described?.landlock?.supported) {
   // 开了网络的会话不补：那时网络失败确实是环境问题。
   const onlineHandler = await handler({
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["**"], bash: { allow: ["sh netprobe.sh"], writable: true, network: true } },
+      "pi-subagents-extend/1": { scope: ["**"], writeScope: ["**"], bash: { allow: ["sh netprobe.sh"], network: true } },
     }),
   })
   assert.equal(
@@ -272,10 +272,13 @@ if (described?.landlock?.supported) {
 // 38. 写越界：结果要说明「这个路径不在主代理给的写授权里」，而不是让子代理
 //     以为文件系统坏了、去换目录或加 sudo。判据是路径 vs spec.write，不是文案猜。
 {
-  // 注意：spec.write 天然包含 tmpdir() 与 cwd，所以「授权外」的路径不能用 /tmp 下的。
-  const outsidePath = `/var/tmp/pi-extend-write-${process.pid}.txt`
-  const insidePath = join(workdir, "inside.txt")
-  const script = join(workdir, "write.sh")
+  // 路径引导现在对所有命令生效：越界目标必须仍在 cwd 内，否则命令在 spawn 前就被引导拦下，
+  // 测不到内核的写拒注解。工程放在 state 目录（不在 /tmp 下），写范围只给 granted/。
+  const project = stateDir(".test-annot-write-")
+  const outsidePath = join(project, "outside.txt")
+  const insidePath = join(project, "granted", "inside.txt")
+  const script = join(project, "write.sh")
+  mkdirSync(join(project, "granted"), { recursive: true })
   writeFileSync(
     script,
     [
@@ -290,17 +293,17 @@ if (described?.landlock?.supported) {
   )
 
   const bindings = JSON.stringify({
-    "pi-subagents-extend/1": { scope: ["**"], bash: { allow: ["sh write.sh"], writable: true } },
+    "pi-subagents-extend/1": { scope: ["**"], writeScope: ["granted"], bash: { allow: ["sh write.sh"] } },
   })
 
   // 授权外：命令真的被内核拒掉。
-  const h = await handler({ bindings })
+  const h = await handler({ cwd: project, bindings })
   const outInput = { command: `sh write.sh ${outsidePath}` }
   assert.equal(await h.call("bash", outInput), undefined, "the writer script is allowlisted")
   const outSpec = specOf(outInput.command)
   assert.equal(outSpec.write.includes(outsidePath), false, "the outside path is not granted")
   if (liveSandbox) {
-    const outExec = spawnSync("/bin/sh", ["-c", outInput.command], { cwd: workdir, encoding: "utf8" })
+    const outExec = spawnSync("/bin/sh", ["-c", outInput.command], { cwd: project, encoding: "utf8" })
     assert.match(`${outExec.stdout}${outExec.stderr}`, /EACCES|Permission denied/u, "the write really is refused")
     assert.equal(existsSync(outsidePath), false, "nothing was written outside the grant")
 
@@ -319,7 +322,7 @@ if (described?.landlock?.supported) {
   const inInput = { command: `sh write.sh ${insidePath}` }
   assert.equal(await h.call("bash", inInput), undefined, "the writer script is allowlisted")
   if (liveSandbox) {
-    const inExec = spawnSync("/bin/sh", ["-c", inInput.command], { cwd: workdir, encoding: "utf8" })
+    const inExec = spawnSync("/bin/sh", ["-c", inInput.command], { cwd: project, encoding: "utf8" })
     assert.equal(inExec.status, 0, `writing inside the grant works: ${inExec.stderr}`)
     assert.ok(existsSync(insidePath), "the file really landed")
     assert.equal(await h.result("bash", `${inExec.stdout}${inExec.stderr}`), undefined, "a granted write is not annotated")
@@ -349,7 +352,7 @@ if (described?.landlock?.supported) {
 {
   const h = await handler({
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["**"], writeScope: ["src"], bash: { allow: ["git commit"], writable: true } },
+      "pi-subagents-extend/1": { scope: ["**"], writeScope: ["src"], bash: { allow: ["git commit"] } },
     }),
   })
   // 授权外的路径不能用 /tmp 下的：spec.write 天然包含 tmpdir()，那里会被判成「授权内」，
@@ -368,7 +371,7 @@ if (described?.landlock?.supported) {
 {
   const h = await handler({
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["**"], writeScope: ["src"], bash: { allow: ["git commit"], writable: true } },
+      "pi-subagents-extend/1": { scope: ["**"], writeScope: ["src"], bash: { allow: ["git commit"] } },
     }),
   })
   const target = `/var/tmp/pi-extend-${process.pid}/hooks/pre-commit`
@@ -395,7 +398,7 @@ if (described?.landlock?.supported) {
 {
   const h = await handler({
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["**"], writeScope: ["src"], bash: { allow: ["git diff", "cat"], writable: true } },
+      "pi-subagents-extend/1": { scope: ["**"], writeScope: ["src"], bash: { allow: ["git diff", "cat"] } },
     }),
   })
   const outside = `/var/tmp/pi-extend-${process.pid}/outside.txt`

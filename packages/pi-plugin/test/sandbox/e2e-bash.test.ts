@@ -9,11 +9,10 @@
 // 断言在临时工程还活着的时候跑（withSandbox 的回调里），跑完才清理：
 // 「盘上有没有那个文件」是这套用例的主要判据，先删盘再断言等于什么都没测。
 //
-// 四个用例（fixture 与套件一一对应）：
+// 三个用例（fixture 与套件一一对应）：
 //   1. bash-write-ok          授权内的写命令真的写进盘
 //   2. bash-write-outside     授权外的写不落盘，结果点名 [sandbox] 授权
-//   3. bash-writable-false    writable: false 在 spawn 前拒写，无副作用
-//   4. bash-network           网络命令在 spawn 前被拒，绝不挂住
+//   3. bash-network           网络命令在 spawn 前被拒，绝不挂住
 //
 //   单独跑：node test/e2e-bash.test.ts（包目录内）
 //   PI_MOCK_KEEP=1 ...       保留临时工程，便于翻会话记录
@@ -198,7 +197,7 @@ function bashResult(run: SandboxOutcome): { tool?: string; text: string } {
 
 // 1. 授权内的写命令真的写进盘。拒了却报成功（exit 0）、或沙箱悄悄丢掉写入，
 //    都会在「盘上有文件且内容正确」这一条上现形。
-await withSandbox({ fixture: "bash-write-ok.yaml", bindings: bashPolicy({ allow: ["cp"], writable: true }) }, (run) => {
+await withSandbox({ fixture: "bash-write-ok.yaml", bindings: bashPolicy({ allow: ["cp"] }) }, (run) => {
 	const result = bashResult(run);
 	assert.equal(
 		/not in the allowlist|\[sandbox\]|write refusal|network is off/.test(result.text),
@@ -220,7 +219,7 @@ await withSandbox({ fixture: "bash-write-ok.yaml", bindings: bashPolicy({ allow:
 // 2. 授权外的写不落盘。目标是工程根下的 blocked/ 目录（不是系统路径）：
 //    Landlock 拒掉 open，cp 以 Permission denied 失败，tool_result 补上
 //    「[sandbox] … outside the writes the parent granted」注解点名真实机制。
-await withSandbox({ fixture: "bash-write-outside.yaml", bindings: bashPolicy({ allow: ["cp"], writable: true }) }, (run) => {
+await withSandbox({ fixture: "bash-write-outside.yaml", bindings: bashPolicy({ allow: ["cp"] }) }, (run) => {
 	const escaped = join(run.project, "blocked", "escape.md");
 	assert.equal(existsSync(escaped), false, "the write outside the granted scope never lands on disk");
 	const result = bashResult(run);
@@ -243,30 +242,6 @@ await withSandbox({ fixture: "bash-write-outside.yaml", bindings: bashPolicy({ a
 	console.log("  ok   授权外的写不落盘，结果带 [sandbox] 注解点名写授权");
 });
 
-// 3. bash.writable: false 在 spawn 前拒写。命令在 bash.allow 里（白名单匹配
-//    成立），但写上限把它压成写拒：文案是 writeBail 的写拒话术，而不是
-//    「不在白名单」。拒绝发生在命令启动前，所以它本该写的文件不存在——
-//    而且目标就在 case 1 写成功的那棵子树里，差异只能来自写上限本身。
-await withSandbox({ fixture: "bash-writable-false.yaml", bindings: bashPolicy({ allow: ["touch"], writable: false }) }, (run) => {
-	const result = bashResult(run);
-	assert.match(
-		result.text,
-		/bash\.writable: false gives no write access/,
-		`the ceiling refusal names bash.writable, not the allowlist. result: ${JSON.stringify(result.text.slice(0, 400))} stderr: ${run.stderr.slice(-500)}`,
-	);
-	assert.match(
-		result.text,
-		/write refusal/,
-		`and it is framed as a write refusal with a way out, not a generic denial. result: ${JSON.stringify(result.text.slice(0, 400))}`,
-	);
-	assert.equal(
-		existsSync(join(run.project, "out", "nope.txt")),
-		false,
-		"the refusal is pre-spawn: the command's own side effect is absent",
-	);
-	assert.equal(run.consumed, 2, "the run continued past the refusal");
-	console.log("  ok   writable: false 在 spawn 前拒写，无副作用");
-});
 
 // 4. 网络命令快速失败而不是挂住。离线沙箱是裸 netns：包被丢而不是被拒，
 //    curl 一旦真被 spawn 就没有任何输出地挂到超时。插件按名单在 spawn 前
@@ -274,7 +249,7 @@ await withSandbox({ fixture: "bash-writable-false.yaml", bindings: bashPolicy({ 
 {
 	const budget = 20_000; // 比默认会话超时短：真挂住时 20s 就大声失败。
 	await withSandbox(
-		{ fixture: "bash-network.yaml", bindings: bashPolicy({ allow: ["curl"], writable: false }), timeoutMs: budget },
+		{ fixture: "bash-network.yaml", bindings: bashPolicy({ allow: ["curl"] }), timeoutMs: budget },
 		(run) => {
 			const result = bashResult(run);
 			assert.match(
@@ -302,4 +277,4 @@ await withSandbox({ fixture: "bash-writable-false.yaml", bindings: bashPolicy({ 
 	);
 }
 
-console.log("pi-subagents-extend bash 沙箱端到端测试通过（4 项）");
+console.log("pi-subagents-extend bash 沙箱端到端测试通过（3 项）");

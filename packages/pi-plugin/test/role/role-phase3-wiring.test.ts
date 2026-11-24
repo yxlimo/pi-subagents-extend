@@ -89,7 +89,7 @@ console.log("pi-subagents-extend role phase 3a wiring");
     const writable = sandboxWritableDirs(
       { writeGlobs: [] } as never,
       worktree,
-      { writable: true, scratchPaths: [], writablePaths: [] } as never,
+      { scratchPaths: [], writablePaths: [] } as never,
     );
     assert.ok(writable.includes(target), "bash can write the deliverable file");
     assert.ok(!writable.includes(dirname(target)), "bash cannot write the parent directory");
@@ -234,21 +234,23 @@ console.log("pi-subagents-extend role phase 3a wiring");
   const dir = temp("wire-directory");
   try {
     mkdirSync(dir, { recursive: true });
+    mkdirSync(join(dir, "src"), { recursive: true });
     const target = deliverableTarget(dir, "dist");
     mkdirSync(target, { recursive: true });
     writeFileSync(join(target, "keep.txt"), "keep\n");
-    const policy = { absoluteWrite: [] as string[] };
+    const policy = { writeGlobs: ["src"], absoluteWrite: [] as string[] };
     const options: { sections?: Record<string, string> } = {};
     const warnings: string[] = [];
     const result = wireDeliverable(dir, { output: { deliverable: "dist" } }, policy, options, (m) => warnings.push(m));
     assert.deepEqual(policy.absoluteWrite, [], "a directory gets no write grant");
     assert.equal(Object.keys(options.sections ?? {}).length, 0, "no deliverable section is announced");
     const writable = sandboxWritableDirs(
-      { writeGlobs: [] } as never,
+      policy as never,
       dir,
-      { writable: true, scratchPaths: [], writablePaths: [] } as never,
+      { scratchPaths: [], writablePaths: [] } as never,
     );
     assert.ok(!writable.includes(target), "no sandbox entry for the directory");
+    assert.ok(writable.includes(join(dir, "src")), "the task still has a write grant elsewhere");
     assert.ok(warnings.some((m) => m.includes(target) && m.includes("not a regular file")), warnings.join("\n"));
     assert.equal(result.target, target);
     ok("phase 3 wiring: a directory deliverable is refused with no grant, section, or sandbox entry");

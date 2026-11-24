@@ -41,7 +41,7 @@ for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
 
 /** grants / spec 用例的公共 rule 实参：只带被测字段，其余按 `as never` 惯例省略。 */
 const writeRule = (extra: Record<string, unknown> = {}): never =>
-  ({ writable: true, scratchPaths: [], writablePaths: [], env: {}, gitExcludes: false, ...extra }) as never
+  ({ scratchPaths: [], writablePaths: [], env: {}, gitExcludes: false, ...extra }) as never
 
 // 整棵子树的写法（`dir`、`dir/**`）必须授权目录本身：Landlock 只能正向授权，
 // 授权目录就是授权它下面所有东西 —— 命令要能在里面建文件。cwd 本身不能因此被
@@ -87,7 +87,7 @@ const writeRule = (extra: Record<string, unknown> = {}): never =>
   writeFileSync(join(cwd, "package.json"), "{}")
 {
   writeFileSync(join(cwd, "Cargo.toml"), "[package]\nname = \"x\"\n")
-  const granted = sandboxWritableDirs({ writeGlobs: [] } as never, cwd, writeRule({ scratchPaths: ["out-artifacts"] }))
+  const granted = sandboxWritableDirs({ writeGlobs: ["package.json"] } as never, cwd, writeRule({ scratchPaths: ["out-artifacts"] }))
   assert.ok(granted.includes(join(cwd, "target")) && existsSync(join(cwd, "target")), "the primary artifact dir is created and granted")
   assert.ok(!existsSync(join(cwd, "dist")) && !granted.includes(join(cwd, "dist")), "a merely conventional dir is not conjured up")
   assert.ok(granted.includes(join(cwd, "out-artifacts")) && existsSync(join(cwd, "out-artifacts")), "an explicitly named missing dir is created, not silently dropped")
@@ -112,7 +112,7 @@ const writeRule = (extra: Record<string, unknown> = {}): never =>
   run(["worktree", "add", "--quiet", linked])
   const common = join(main, ".git")
   const gitDir = join(common, "worktrees", "wt-linked")
-  const granted = sandboxWritableDirs({ writeGlobs: [] } as never, linked, writeRule())
+  const granted = sandboxWritableDirs({ writeGlobs: ["seed.txt"] } as never, linked, writeRule())
   assert.ok(granted.includes(gitDir), "the linked worktree's own gitdir is granted (index.lock lives there)")
   for (const name of ["objects", "refs", "logs"]) {
     assert.ok(granted.includes(join(common, name)), `the common dir is granted for ${name}`)
@@ -123,25 +123,6 @@ const writeRule = (extra: Record<string, unknown> = {}): never =>
   console.log("  ok   a linked worktree grants its gitdir plus common objects/refs/logs, never hooks or config")
 }
 
-// writable: false 是角色自己定下的上限：写范围一个目录都不进 spec，任何一层都
-// 不该放宽它。但 helper 需要的挂载不能少 —— /tmp 与设备文件必须仍在 write 里，
-// 否则命令连 2>/dev/null 都过不去（EPERM）。
-{
-  const cwd = join(root, "readonly")
-  const secret = join(cwd, "secret")
-  mkdirSync(secret, { recursive: true })
-  writeFileSync(join(secret, "leak.txt"), "")
-  const rule = writeRule({
-    writable: false,
-    env: { TMPDIR: "/tmp", MISE_STATE_DIR: join(root, "mise") },
-  })
-  const spec: { tmp?: string; write: string[] } = buildSpec(cwd, rule, { writeGlobs: ["secret"] } as never)
-  assert.ok(!spec.write.some((p) => p === secret || p.startsWith(`${secret}/`)), "a writable:false role leaks no scope dir into the spec")
-  assert.ok(spec.write.includes("/tmp"), "/tmp stays granted so the command has a working tmp")
-  assert.ok(spec.write.includes("/dev/null"), "device paths stay granted so redirections do not die with EPERM")
-  assert.ok(!("tmp" in spec), "no private tmp mount is requested when TMPDIR is the conventional /tmp")
-  console.log("  ok   a writable:false role carries no scope dirs but keeps the mounts the helper needs")
-}
 
 // scratchDir 同时是 spec.tmp（helper 挂私有 tmpfs 的位置）和 write 里的授权：
 // 两处必须是同一个目录，命令写进 TMPDIR 的文件才落在沙箱里，而不是落在宿主的
@@ -220,4 +201,23 @@ const afterHelper = (wrapped: string): string => wrapped.slice(wrapped.indexOf("
   console.log("  ok   the toolchain scan sorts by code unit, not by readdir order or locale")
 }
 
-console.log("  sandbox.unit: 13 cases passed")
+// 没有写配置的任务一个写授权都不给 —— 连 .git 与 node_modules 都不给：只读任务不该留下
+// 植入 hook 的口子。正控先证明这两样东西在「有写范围」时确实会被授权，否则「没给」也可能
+// 只是因为夹具里它们根本不存在。
+{
+  const cwd = join(root, "nowrite")
+  mkdirSync(join(cwd, "src"), { recursive: true })
+  mkdirSync(join(cwd, "node_modules", ".bin"), { recursive: true })
+  writeFileSync(join(cwd, "package.json"), "{}\n")
+  execFileSync("git", ["init", "-q"], { cwd, stdio: "ignore" })
+
+  const readOnly = sandboxWritableDirs({ writeGlobs: [], absoluteWrite: [] } as never, cwd, writeRule())
+  assert.deepEqual(readOnly, [], "a task with no write configuration gets no writable path at all")
+
+  const writer = sandboxWritableDirs({ writeGlobs: ["src"], absoluteWrite: [] } as never, cwd, writeRule())
+  assert.ok(writer.includes(join(cwd, "node_modules")), `the control grants node_modules, got: ${writer.join(", ")}`)
+  assert.ok(writer.includes(join(cwd, ".git")), `the control grants the git directory, got: ${writer.join(", ")}`)
+  console.log("  ok   a task with no write configuration gets no writable path, not even .git")
+}
+
+console.log("  sandbox.unit: 10 cases passed")

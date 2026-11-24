@@ -92,91 +92,31 @@ import "../support.ts"
 
 
 
-// 277. /permission states no-write-access on the allow column itself, not per entry.
+
+
+// 279. /permission prints a plain allow line.
 {
   const h = await handler({
     bindings: JSON.stringify({
       "pi-subagents-extend/1": {
         scope: ["src/**"],
-        bash: { allow: ["git commit", "git diff"], writable: false },
+        bash: { allow: ["ls a"] },
       },
     }),
   })
   const notified: string[] = []
   await h.commands["permission"].handler("", { cwd: workdir, ui: { notify: (m: string) => notified.push(m) } })
   const text = notified.join("\n")
-  const allowLine = text.split("\n").find((line) => line.startsWith("bash allow"))
-  assert.ok(allowLine, "the allow line is printed")
-  assert.match(
-    allowLine ?? "",
-    /^bash allow \(no write access: commands that write are refused\): /,
-    "the no-write-access note belongs to the column",
-  )
-  assert.match(allowLine ?? "", /git commit \| git diff/, "both entries are still listed")
-  assert.doesNotMatch(allowLine ?? "", /\(will be refused/, "no individual entry is marked as refused")
-  h.restore()
-  console.log("  ok   /permission puts the no-write-access note on the allow column, not on entries")
-}
-
-// 278. A pattern that can also match a read is not flagged; a matching write still hits the write rule.
-{
-  const h = await handler({
-    bindings: JSON.stringify({
-      "pi-subagents-extend/1": {
-        scope: ["src/**"],
-        bash: { allow: ["git tag", "git commit"], writable: false },
-      },
-    }),
-  })
-  const notified: string[] = []
-  await h.commands["permission"].handler("", { cwd: workdir, ui: { notify: (m: string) => notified.push(m) } })
-  const text = notified.join("\n")
-  const allowLine = text.split("\n").find((line) => line.startsWith("bash allow"))
-  assert.ok(allowLine, "the allow line is printed")
-  assert.match(
-    allowLine ?? "",
-    /^bash allow \(no write access: commands that write are refused\): /,
-    "the column carries the note",
-  )
-  assert.doesNotMatch(allowLine ?? "", /git tag \(will be refused/, "git tag is not singled out as refused")
-  assert.doesNotMatch(allowLine ?? "", /git commit \(will be refused/, "nor is the genuine writer")
-
-  const listing = { command: "git tag -l" }
-  assert.equal(await h.call("bash", listing), undefined, "the listing form of the tag pattern still runs")
-
-  const commit = { command: "git commit" }
-  const denied = await h.call("bash", commit)
-  assert.equal(denied?.block, true, "a genuine write through a matching entry is refused")
-  assert.match(String(denied?.reason), /write refusal|gives no write access/, "the refusal is the write rule")
-  assert.doesNotMatch(String(denied?.reason), /not in the allowlist/, "not an allowlist miss")
-
-  h.restore()
-  console.log("  ok   patterns are not classified; a matching read runs and a matching write hits the write rule")
-}
-
-// 279. /permission leaves the no-write note off a writable allow column.
-{
-  const h = await handler({
-    bindings: JSON.stringify({
-      "pi-subagents-extend/1": {
-        scope: ["src/**"],
-        bash: { allow: ["ls a"], writable: true },
-      },
-    }),
-  })
-  const notified: string[] = []
-  await h.commands["permission"].handler("", { cwd: workdir, ui: { notify: (m: string) => notified.push(m) } })
-  const text = notified.join("\n")
-  assert.ok(text.includes("bash allow: ls a"), "the writable column prints its entries")
+  assert.ok(text.includes("bash allow: ls a"), "the allow column prints its entries")
   assert.equal(text.includes("no write access"), false, "no write refusal note is printed")
   h.restore()
-  console.log("  ok   /permission prints a plain allow line when the column is writable")
+  console.log("  ok   /permission prints a plain allow line when the allowlist has entries")
 }
 
 
 // 281. A role md that only repeats a default must not be named as a source layer.
 //      Filling a field the payload left out is not the same as changing the outcome: an
-//      allow-less `bash: { writable: false }` parses to the same policy as no bash block
+//      bash: { network: false } parses to the same policy as no bash block
 //      at all, so the refusal's source must stay the payload alone — the md is not where
 //      the parent can fix anything. An md that does change the parsed policy must keep
 //      being named, so the pair of directions in one case is the point.
@@ -186,7 +126,7 @@ import "../support.ts"
   const md = writeAgentMd({
     cwd: proj,
     role: "repeat-default",
-    extend: { permissions: { bash: { writable: false } } },
+    extend: { permissions: { bash: { network: false } } },
   })
   const run = await childRun({
     cwd: proj,

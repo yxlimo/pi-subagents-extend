@@ -1,7 +1,7 @@
 // bash 命令层的纯函数用例。
 //
 // src/bash/ 下的六个模块（tokens / env / network / programs / rules / unreachable）
-// 今天是纯函数：切词、剥前置赋值、判读写、匹配规则，都在一条命令字符串上做。
+// 今天是纯函数：切词、剥前置赋值、匹配规则，都在一条命令字符串上做。
 // 但它们只经 handler 到达，于是每一条断言都要拖起一整个假 pi 会话。
 // 这里直接调纯函数：没有假 pi API、没有 bindings JSON、没有沙箱 helper。
 //
@@ -9,13 +9,10 @@
 
 import assert from "node:assert/strict"
 import {
-	classifyCommand,
-	commandAccess,
 	commandMatches,
 	deniedEnvAssignment,
 	deniedEntry,
 	firstToken,
-	isUnknownProgram,
 	leadingAssignments,
 	listedJoin,
 	MAX_LISTED,
@@ -172,119 +169,19 @@ import {
 	console.log("  ok   requiresNetwork sees through a timeout wrapper")
 }
 
-// 18. 表里的写程序就是写。
-{
-	for (const cmd of ["rm x", "cp a b", "mkdir d", "touch f"]) {
-		assert.equal(commandAccess(cmd, true), "write", `writer must be write: ${cmd}`)
-	}
-	console.log("  ok   commandAccess puts every writer in the write class")
-}
 
-// 19. 表里的读程序就是读。
-{
-	for (const cmd of ["cat x", "ls", "rg foo", "find . -name x"]) {
-		assert.equal(commandAccess(cmd, true), "read", `reader must be read: ${cmd}`)
-	}
-	console.log("  ok   commandAccess puts every reader in the read class")
-}
-
-// 20. 两张表里都没有的程序：判不出来就按读跑，并且被标成 unknown ——
-//     注解要能说清「它按 read 跑是因为判不出来」，而不是假装它是读程序。
-{
-	assert.equal(commandAccess("frobnicate x", true), "read", "an unlisted program runs as read")
-	assert.equal(isUnknownProgram("frobnicate x"), true, "and it is reported as unknown")
-	assert.equal(isUnknownProgram("cat x"), false, "a listed reader is not unknown")
-	console.log("  ok   a program outside both tables is read and is flagged unknown")
-}
-
-// 21. xargs 是拿来跑程序的：剥完旗标仍判不出程序时按写 ——
-//     判不出来的 payload 真的会写，而模型什么都不知道。
-{
-	assert.equal(commandAccess("xargs frobnicate", true), "write", "an unknown payload program is still write")
-	console.log("  ok   xargs with an unrecognisable payload program is write")
-}
-
-// 22. git 的全局旗标认不全时子命令位置不可靠：按写处理，
-//     不能顺着错位置把它静默判成读。
-{
-	assert.equal(
-		commandAccess("git --namespace foo reset --hard", true),
-		"write",
-		"a git subcommand that cannot be located is write",
-	)
-	console.log("  ok   a git subcommand that cannot be located is write")
-}
-
-// 23. 包管理器的前置旗标认不全时同理：不猜一个 token 当子命令。
-{
-	assert.equal(
-		commandAccess("pnpm --mystery-flag dir list", true),
-		"write",
-		"a package-manager subcommand that cannot be located is write",
-	)
-	console.log("  ok   a package-manager subcommand that cannot be located is write")
-}
-
-// 24. 包管理器的写子命令：它们执行任意代码或改文件。
-{
-	for (const cmd of ["pnpm run build", "npm exec cowsay", "pnpm test", "npm install"]) {
-		assert.equal(commandAccess(cmd, true), "write", `package-manager writer must be write: ${cmd}`)
-	}
-	console.log("  ok   commandAccess puts the package-manager writers in the write class")
-}
-
-// 25. 包管理器的只读子命令：查询。
-{
-	for (const cmd of ["pnpm list", "npm ls", "pnpm why x", "npm view x", "npm info x", "pnpm show", "pnpm outdated"]) {
-		assert.equal(commandAccess(cmd, true), "read", `package-manager query must be read: ${cmd}`)
-	}
-	console.log("  ok   commandAccess puts the package-manager queries in the read class")
-}
-
-// 26. 带值的全局旗标吃掉自己的值之后才是子命令：`pnpm -C dir list` 的
-//     子命令是 list，不是 dir。
-{
-	assert.equal(commandAccess("pnpm -C dir list", true), "read", "a value-taking flag is not the subcommand")
-	console.log("  ok   pnpm -C dir list is read")
-}
-
-// 27. 不认识的旗标只跳它自己：子命令的名字本身就是位置的强证据，
-//     不该被一个未知旗标挤出去。
-{
-	assert.equal(commandAccess("pnpm --silent list", true), "read", "an unknown flag does not push the subcommand out")
-	console.log("  ok   pnpm --silent list is read")
-}
-
-// 28. 引号包住的 git 全局值不藏住动词：切词错了就会把 reset 读成 b，
-//     那条命令于是被判成读命令。
-{
-	assert.equal(
-		commandAccess('git -c k="a b c" reset --hard', true),
-		"write",
-		"a quoted global value does not hide the verb",
-	)
-	assert.equal(
-		commandAccess('git -c k="a b c" log', true),
-		"read",
-		"and the verb still decides the other way",
-	)
-	console.log("  ok   a quoted git global value does not hide the verb")
-}
-
-// 29. allow 单列与开关各自按字面值读。
+// 29. allow / deny / network 各自按字面值读。
 {
 	const rule = parseBashRule({
 		allow: ["git status"],
 		network: true,
-		writable: true,
 		deny: ["rm -rf /"],
 	})
 	assert.ok(rule, "a rule with entries parses")
 	assert.deepEqual(rule.allow, ["git status"], "allow is its own column")
 	assert.deepEqual(rule.deny, ["rm -rf /"], "deny is read as deny")
 	assert.equal(rule.network, true, "network is read as network")
-	assert.equal(rule.writable, true, "writable is read as writable")
-	console.log("  ok   parseBashRule reads the allow column and the switches")
+	console.log("  ok   parseBashRule reads the allow, deny and network columns")
 }
 
 // 30. 三列都没有条目就是没有 bash：开关自己不算授权。
@@ -317,34 +214,6 @@ import {
 	console.log("  ok   a re: entry is anchored to the whole command")
 }
 
-// 36. classifyCommand 说出命中的是哪一条：条目原文与列名都给出。
-{
-	const rule = parseBashRule({ allow: ["git status"], writable: true })
-	assert.ok(rule, "the rule parses")
-	assert.deepEqual(
-		classifyCommand(rule, "git status --short"),
-		{ access: "read", entry: "git status" },
-		"the matching entry is named",
-	)
-	console.log("  ok   classifyCommand names the entry that matched")
-}
-
-// 37. allow 列的读写由命令本身推出来，不是由列名。
-{
-	const rule = parseBashRule({ allow: ["rm f", "cat f"], writable: true })
-	assert.ok(rule, "the rule parses")
-	assert.deepEqual(
-		classifyCommand(rule, "rm f"),
-		{ access: "write", entry: "rm f" },
-		"an allow entry whose command writes is a write",
-	)
-	assert.deepEqual(
-		classifyCommand(rule, "cat f"),
-		{ access: "read", entry: "cat f" },
-		"an allow entry whose command reads is a read",
-	)
-	console.log("  ok   the allow column takes its access from the command")
-}
 
 
 // 39. allow 不能取消 deny：两条都命中时，deny 仍然先说。
@@ -353,7 +222,7 @@ import {
 	assert.ok(rule, "the rule parses")
 	assert.equal(deniedEntry(rule, "git push origin main"), "git push", "the deny entry is named")
 	assert.equal(
-		classifyCommand(rule, "git push origin main")?.entry,
+		rule.allow.find((entry) => commandMatches(entry, "git push origin main")),
 		"git push",
 		"the allow entry still matches it: the deny is not cancelled, it is checked first",
 	)

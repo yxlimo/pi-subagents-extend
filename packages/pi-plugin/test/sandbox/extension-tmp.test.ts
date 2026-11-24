@@ -15,7 +15,7 @@ import { handler, specOf, workdir } from "../harness.ts"
   mkdirSync(scratch, { recursive: true })
   process.env.TMPDIR = scratch
   const h = await handler({
-    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["pnpm run typecheck"], writable: true } } }),
+    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["src/**"], writeScope: ["src/**"], bash: { allow: ["pnpm run typecheck"] } } }),
   })
   const input = { command: "pnpm run typecheck" }
   assert.equal(await h.call("bash", input), undefined, "a listed command still passes with a custom TMPDIR")
@@ -35,7 +35,7 @@ import { handler, specOf, workdir } from "../harness.ts"
   // 仍能被旧版 helper 解开（它的 spec 解析是 deny_unknown_fields）。
   delete process.env.TMPDIR
   const plain = await handler({
-    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["pnpm run typecheck"], writable: true } } }),
+    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["src/**"], writeScope: ["src/**"], bash: { allow: ["pnpm run typecheck"] } } }),
   })
   const plainInput = { command: "pnpm run typecheck" }
   assert.equal(await plain.call("bash", plainInput), undefined, "listed command passes")

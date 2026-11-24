@@ -123,7 +123,8 @@ function requiresNetworkOf(command: string): string | null {
 			"pi-subagents-extend/1": {
 				scope: ["."],
 				maxDenies: 0,
-				bash: { allow: ["curl", "git fetch", "pnpm install", "git status", "rg"], writable: true },
+				writeScope: ["."],
+				bash: { allow: ["curl", "git fetch", "pnpm install", "git status", "rg"] },
 			},
 		}),
 	})
@@ -145,7 +146,7 @@ function requiresNetworkOf(command: string): string | null {
 	assert.equal(requiresNetworkOf("git fetch origin"), "git fetch", "the matcher names the subcommand")
 	const h = await handler({
 		bindings: JSON.stringify({
-			"pi-subagents-extend/1": { scope: ["."], maxDenies: 0, bash: { allow: ["git fetch"], writable: true } },
+			"pi-subagents-extend/1": { scope: ["."], writeScope: ["."], maxDenies: 0, bash: { allow: ["git fetch"] } },
 		}),
 	})
 	const denied = await h.call("bash", { command: "git fetch origin" })
@@ -179,7 +180,8 @@ function requiresNetworkOf(command: string): string | null {
 		bindings: JSON.stringify({
 			"pi-subagents-extend/1": {
 				scope: ["."],
-				bash: { allow: ["pnpm install", "npm ci", "cargo fetch", "npm run build", "pnpm --dir packages/pi-plugin run typecheck"], writable: true },
+				writeScope: ["."],
+				bash: { allow: ["pnpm install", "npm ci", "cargo fetch", "npm run build", "pnpm --dir packages/pi-plugin run typecheck"] },
 			},
 		}),
 	})
@@ -235,7 +237,8 @@ function requiresNetworkOf(command: string): string | null {
 			"pi-subagents-extend/1": {
 				scope: ["."],
 				maxDenies: 0,
-				bash: { allow: ["git remote -v", "git submodule update", "git remote update"], writable: true },
+				writeScope: ["."],
+				bash: { allow: ["git remote -v", "git submodule update", "git remote update"] },
 			},
 		}),
 	})
@@ -326,7 +329,8 @@ function requiresNetworkOf(command: string): string | null {
 			"pi-subagents-extend/1": {
 				scope: ["."],
 				maxDenies: 0,
-				bash: { allow: ["git"], writable: true },
+				writeScope: ["."],
+				bash: { allow: ["git"] },
 			},
 		}),
 	})

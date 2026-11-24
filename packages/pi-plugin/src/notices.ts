@@ -6,7 +6,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { relative } from "node:path";
-import { allEntries, classifyCommand, commandNeedsNoManifest, firstToken, leadingAssignments, listedJoin, MAX_LISTED, unreachableEntries, type BashRule, type UnreachableEntry } from "./bash/index.ts";
+import { allEntries, commandMatches, commandNeedsNoManifest, firstToken, leadingAssignments, listedJoin, MAX_LISTED, unreachableEntries, type BashRule, type UnreachableEntry } from "./bash/index.ts";
 
 
 /** worktree 默认值依赖的角色 md：确认未被 git 跟踪的只提示一次（session_start 清空）。 */
@@ -90,14 +90,13 @@ export function unreachableCommandNote(text: string, command: string, rule: Bash
 	// 别在这里再推一遍匹配：直接问 allowlist「是**哪一条**放行这条命令的」，再查那一条是否
 	// 不可达。自己匹配会出错，而且已经错过两次：按首 token 比，会让同程序名的无关条目被点名；
 	// 在不可达子集里按 `allEntries` 顺序取第一条命中，会让一条**比命令更短**的宽条目（`pnpm`）
-	// 顶替真正放行它的那条。`classifyCommand` 用的是判定本身的规则（write 列优先、第一条命中），
-	// 所以它给的答案就是唯一的答案。
+	// 顶替真正放行它的那条。这里用的是判定本身的那条规则（第一条命中），所以答案唯一。
 	// 命令**自己**不需要 manifest 时，一句都不要说：宽条目 `pnpm` 会被判成不可达，但它放行的
 	// `pnpm --version` / `pnpm store path` / `pnpm --dir x run build` 跟 cwd 有没有 manifest
 	// 无关，失败原因是别的东西。把原因安到不成立的前提上，比不说更糟。
 	if (commandNeedsNoManifest(command)) return undefined;
-	const granted = classifyCommand(rule, command);
-	const bad = granted === undefined ? undefined : unreachableEntries([granted.entry], cwd)[0];
+	const granted = rule.allow.find((entry) => commandMatches(entry, command));
+	const bad = granted === undefined ? undefined : unreachableEntries([granted], cwd)[0];
 	if (!bad) return undefined;
 	const remedy = remedyFor(bad);
 	return `${SANDBOX_MARK} this command ran, but "${bad.entry}" cannot work from ${bad.lookedIn ?? cwd}: ${bad.why}. ${remedy}`;

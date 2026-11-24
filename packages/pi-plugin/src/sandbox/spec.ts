@@ -9,7 +9,7 @@ import { resolve } from "node:path";
 import type { BashRule } from "../bash/index.ts";
 import { CONVENTIONAL_TMP, dropHiddenGrants, expandPath, findWorktreeRoot, privatisedDirs, resolveComparable } from "../paths/index.ts";
 import type { Policy } from "../policy/index.ts";
-import { reportHiddenGrants, sandboxWritableDirs, SANDBOX_DEVICE_PATHS, stateDir, toolchainCacheDir } from "./grants.ts";
+import { hasWriteGrant, reportHiddenGrants, sandboxWritableDirs, SANDBOX_DEVICE_PATHS, stateDir, toolchainCacheDir } from "./grants.ts";
 
 /** 沙箱里 git 用的全局排除规则：依赖目录不进索引。 */
 const GIT_EXCLUDE_PATTERNS = ["node_modules/", ".pnpm-store/"];
@@ -44,7 +44,7 @@ function gitExcludesFile(): string | undefined {
  *
  * 两者都可以被父代理用 bash.env 覆盖。
  */
-function sandboxEnv(cwd: string, rule: BashRule): Record<string, string> {
+function sandboxEnv(cwd: string, rule: BashRule, policy: Policy): Record<string, string> {
 	const env: Record<string, string> = { ...rule.env };
 	const privateDir = `/tmp/.pi-subagents-extend-${process.pid}`;
 	// git 的全局排除：子代理 `git add -A` 时不把依赖目录吸进索引。
@@ -60,7 +60,7 @@ function sandboxEnv(cwd: string, rule: BashRule): Record<string, string> {
 	if (!env.XDG_RUNTIME_DIR) env.XDG_RUNTIME_DIR = `${privateDir}/runtime`;
 	// 构建缓存要跨调用持久，所以放 ~/.cache 而不是私有的 /tmp；只在沙箱可写时给，
 	// 只读沙箱里指向一个不可写目录只会让报错更难读。
-	if (rule.writable) {
+	if (hasWriteGrant(policy, rule)) {
 		const cache = toolchainCacheDir();
 		if (cache && !env.XDG_CACHE_HOME) env.XDG_CACHE_HOME = cache;
 	}
@@ -181,7 +181,7 @@ export function buildSpec(cwd: string, rule: BashRule, policy: Policy, warn?: (m
 		// 只在开启时写：spec 是 deny_unknown_fields，旧版 helper 拿到这个键会直接拒掉整份
 		// spec，所以关闭时必须连键都不出现。
 		...(rule.cpuStallSeconds === false ? {} : { stallSeconds: rule.cpuStallSeconds }),
-		env: sandboxEnv(cwd, rule),
+		env: sandboxEnv(cwd, rule, policy),
 	};
 }
 

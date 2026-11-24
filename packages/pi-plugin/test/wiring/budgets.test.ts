@@ -19,7 +19,7 @@ import { handler, specOf, fakeClock, defaultProbe, workdir, repo } from "../harn
 {
   const h = await handler({
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["src/**"], maxDenies: 2, bash: { allow: ["pnpm run typecheck"], writable: true} },
+      "pi-subagents-extend/1": { scope: ["src/**"], writeScope: ["src/**"], maxDenies: 2, bash: { allow: ["pnpm run typecheck"]} },
     }),
   })
   const counted = (reason: string): boolean => /in a row|denial budget/.test(reason)
@@ -216,7 +216,7 @@ import { handler, specOf, fakeClock, defaultProbe, workdir, repo } from "../harn
   })
   let last: { stop: boolean } | undefined
   for (const out of ["a", "b", "c", "d"]) {
-    last = p.noteBashStart("ls -la .pnpm", "read")
+    last = p.noteBashStart("ls -la .pnpm")
     p.noteBashResult(out)
     assert.notEqual(last?.stop, true, "a repeat that returns new output is progress, not spinning")
   }
@@ -237,13 +237,13 @@ import { handler, specOf, fakeClock, defaultProbe, workdir, repo } from "../harn
     host: clock.host,
   })
   for (let i = 0; i < 2; i += 1) {
-    p.noteBashStart("git status", "read")
+    p.noteBashStart("git status")
     p.noteBashResult("On branch main\nnothing to commit")
   }
-  const third = p.noteBashStart("git status", "read")
+  const third = p.noteBashStart("git status")
   assert.equal(third?.stop, false, "identical output still reaches the warn")
   p.noteBashResult("On branch main\nnothing to commit")
-  const fourth = p.noteBashStart("git status", "read")
+  const fourth = p.noteBashStart("git status")
   assert.equal(fourth?.stop, true, "and one more still stops the run")
   p.dispose()
   console.log("  ok   输出一字不差的重复仍算原地打转（72 的另一半）")
@@ -262,9 +262,9 @@ import { handler, specOf, fakeClock, defaultProbe, workdir, repo } from "../harn
     hooks: { warn: () => {} },
     host: clock.host,
   })
-  p.noteBashStart("ls -la .pnpm", "read")
+  p.noteBashStart("ls -la .pnpm")
   p.noteBashResult("same")
-  const warned = p.noteBashStart("ls -la .pnpm", "read")
+  const warned = p.noteBashStart("ls -la .pnpm")
   assert.equal(warned?.stop, false, "the threshold warn comes first")
   p.noteBashResult("same")
   // 宽限到期由边界兑现（探针自己停机的那条路）。
@@ -295,7 +295,7 @@ import { handler, specOf, fakeClock, defaultProbe, workdir, repo } from "../harn
   const armed = await handler({
     cwd: workdir,
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: [workdir], bash: { allow: ["node"], writable: true, cpuStallSeconds: 90} },
+      "pi-subagents-extend/1": { scope: [workdir], writeScope: [workdir], bash: { allow: ["node"], cpuStallSeconds: 90} },
     }),
   })
   const armedInput = { command: "node build.mjs" }
@@ -305,7 +305,7 @@ import { handler, specOf, fakeClock, defaultProbe, workdir, repo } from "../harn
 
   const plain = await handler({
     cwd: workdir,
-    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: [workdir], bash: { allow: ["node"], writable: true} } }),
+    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: [workdir], writeScope: [workdir], bash: { allow: ["node"] } } }),
   })
   const plainInput = { command: "node build.mjs" }
   await plain.call("bash", plainInput)
@@ -362,7 +362,7 @@ import { handler, specOf, fakeClock, defaultProbe, workdir, repo } from "../harn
     hooks: { warn: () => {} },
     host: clock2.host,
   })
-  done.noteBashStart("pnpm test", "write")
+  done.noteBashStart("pnpm test")
   done.noteBashResult("all tests passed", "x")
   clock2.advance(1000)
   const doneFirst = done.atToolBoundary()
@@ -389,18 +389,18 @@ import { handler, specOf, fakeClock, defaultProbe, workdir, repo } from "../harn
     host: clock.host,
   })
   // a 与 b 并行进入，结果按相反顺序回来。
-  p.noteBashStart("ls -la a", "read", "call-1")
-  p.noteBashStart("ls -la b", "read", "call-2")
+  p.noteBashStart("ls -la a", "call-1")
+  p.noteBashStart("ls -la b", "call-2")
   p.noteBashResult("b1", "call-2")
   p.noteBashResult("a1", "call-1")
   // 再来一轮：a 带回新输出（进展，计数清零），b 与上次相同（继续累加）。
-  p.noteBashStart("ls -la a", "read", "call-3")
-  p.noteBashStart("ls -la b", "read", "call-4")
+  p.noteBashStart("ls -la a", "call-3")
+  p.noteBashStart("ls -la b", "call-4")
   p.noteBashResult("a2", "call-3")
   p.noteBashResult("b2", "call-4")
   // 第三次 a：输出与 a2 相同，计数应为 2，还不到 3，不该停。
   // 单槽时 a1 的结果被记到 b 名下、a 的基线被丢掉，于是这次被当成第 3 次 → 误杀。
-  const a3 = p.noteBashStart("ls -la a", "read", "call-5")
+  const a3 = p.noteBashStart("ls -la a", "call-5")
   // 固定实现下 a 的计数已被新输出清零，第 3 次什么也不返回；单槽下 a 的计数是累加到 3 的，
   // 于是这里会给出「同一命令重复 3 次」的警告（`stop: false`，下一次就硬停）。
   assert.equal(a3, undefined, "a's own changed output reset its count; a single slot warns here")

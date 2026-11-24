@@ -27,9 +27,9 @@
  * - bash：默认拒绝。bindings 里写 bash.allow（命令前缀白名单，如 "pnpm run typecheck"）
  *   后，只有命中白名单的命令放行，并且改写成交给沙箱 helper 执行：读写范围由
  *   Landlock 强制（内核 ABI 7 起），网络默认断（bash.network 可开）：断网时连
- *   UDP/DNS 一起断，靠私有网络命名空间 + 盖掉解析器套接字；可写面只有写范围覆盖到的路径
- *   （bash.writable 时）、git 真正要写的目录与 bash.writablePaths，防止用 shell 绕过范围去改文件
- *   读面不收紧（工具链在 /nix/store，收窄读根会打死所有命令）；只读类命令另加一条路径引导：
+ *   UDP/DNS 一起断，靠私有网络命名空间 + 盖掉解析器套接字；可写面只有写范围覆盖到的路径、
+ *   git 真正要写的目录与 bash.writablePaths，防止用 shell 绕过范围去改文件
+ *   读面不收紧（工具链在 /nix/store，收窄读根会打死所有命令）；另加一条路径引导：
  *   参数里看起来像路径的 token 按真实路径判，落在范围外就被点名拒绝，并指回去用 read 工具
  * - powershell / codemode：一律拒绝（没有路径可判，能绕过范围）
  * - structured_output / todo 与 allowTools 里列出的工具：放行（执行器类不可放行；
@@ -57,17 +57,12 @@ export { nodeModulesWriteHint, wireDeliverable, wirePreExec, wireWorktree } from
 export { hasUnquotedShellControl } from "./wiring/tool-call/judge.ts";
 
 /**
- * /permission 的 allow 列：writable:false 时标注整列，不逐条判定。
- * 条目只是前缀或正则，同一条匹配的不同命令读写判定可能不同（git tag 与能跑的
- * git tag -l），对单条下结论必然失真；把「写会被拒」说成列的性质才准确。
+ * /permission 的 allow 列。写不写由目录授权决定，与「命令在不在白名单」无关，
+ * 所以这里只报白名单本身，不再对整列下读写结论。
  */
 function permissionAllowColumn(rule: BashRule): string {
 	const entries = rule.allow.join(" | ") || "(none)";
-	if (rule.allow.length === 0) return `bash allow: ${entries}`;
-	// 空列没有可匹配的条目，写拒分支根本进不去，所以不标注一条不存在的机制。
-	return rule.writable === false
-		? `bash allow (no write access: commands that write are refused): ${entries}`
-		: `bash allow: ${entries}`;
+	return `bash allow: ${entries}`;
 }
 
 
@@ -179,7 +174,7 @@ export function activate(pi: ExtensionAPI, options: ActivateOptions = {}) {
 						? `bash deny (cannot be lifted): ${w.policy.bash.deny.join(" | ")}`
 						: undefined,
 					w.policy.bash
-						? `Sandbox: ${w.policy.bash.network ? "network on" : "offline"}, ${w.policy.bash.writable ? "scope writable" : "read-only root"}`
+						? `Sandbox: ${w.policy.bash.network ? "network on" : "offline"}`
 						: undefined,
 					helperLine,
 					w.policy.bash

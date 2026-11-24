@@ -27,9 +27,9 @@ import { restoreState } from "../support.ts"
     bindings: JSON.stringify({
       "pi-subagents-extend/1": {
         scope: ["src/**"],
+        writeScope: ["src/**"],
         bash: {
           allow: ["pnpm install"],
-          writable: true,
           writablePaths: [store],
           env: { FOO: "bar" },
         },
@@ -69,7 +69,8 @@ import { restoreState } from "../support.ts"
     bindings: JSON.stringify({
       "pi-subagents-extend/1": {
         scope: ["src/**"],
-        bash: { allow: ["pnpm run typecheck"], writable: true, writablePaths: ["/tmp"] },
+        bash: { allow: ["pnpm run typecheck"], writablePaths: ["/tmp"] },
+        writeScope: ["src/**"],
       },
     }),
   })
@@ -87,7 +88,7 @@ import { restoreState } from "../support.ts"
   const h = await handler({
     cwd: workdir,
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["pnpm run typecheck"], writable: true }, maxDenies: 0 },
+      "pi-subagents-extend/1": { scope: ["src/**"], writeScope: ["src/**"], bash: { allow: ["pnpm run typecheck"] }, maxDenies: 0 },
     }),
   })
   const denied = await h.call("bash", { command: "pnpm install" })
@@ -98,7 +99,7 @@ import { restoreState } from "../support.ts"
   console.log("  ok   bash 拒绝文案带上 pnpm store 路径")
 }
 
-// 26. node_modules is writable when the sandbox is writable; git excludes keep
+// 26. node_modules is writable when the task has a write scope; git excludes keep
 // dependency directories out of the index.
 {
   mkdirSync(join(workdir, "node_modules", ".bin"), { recursive: true })
@@ -106,7 +107,8 @@ import { restoreState } from "../support.ts"
     bindings: JSON.stringify({
       "pi-subagents-extend/1": {
         scope: ["src/**"],
-        bash: { allow: ["pnpm install"], writable: true},
+        bash: { allow: ["pnpm install"] },
+        writeScope: ["src/**"],
       },
     }),
   })
@@ -130,7 +132,7 @@ import { restoreState } from "../support.ts"
     "the exclude file is readable from the sandbox (read covers all of /)",
   )
   h.restore()
-  console.log("  ok   可写沙箱里 node_modules 也可写；git 排除规则防止依赖目录进索引")
+  console.log("  ok   有写范围时 node_modules 也可写；git 排除规则防止依赖目录进索引")
 }
 
 // 27. The helper gates on kernel support: a kernel below Landlock ABI 7 means no bash.
@@ -144,7 +146,7 @@ import { restoreState } from "../support.ts"
   const previous = process.env.PI_SUBAGENTS_EXTEND_HELPER_PATH
   process.env.PI_SUBAGENTS_EXTEND_HELPER_PATH = fake
   const h = await handler({
-    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["pnpm test"], writable: true} } }),
+    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["src/**"], writeScope: ["src/**"], bash: { allow: ["pnpm test"] } } }),
   })
   const denied = await h.call("bash", { command: "pnpm test" })
   assert.equal(denied?.block, true, "an unsupported kernel denies bash")
@@ -296,14 +298,14 @@ async function mdChild({ cwd, prompt, bindings }: { cwd: string; prompt: string;
     let commonDir = spawnSync("git", ["rev-parse", "--git-common-dir"], { cwd: wtDir, encoding: "utf8", env: gitEnv }).stdout.trim()
     if (!commonDir.startsWith("/")) commonDir = join(wtDir, commonDir)
 
-    const bindings = (writable: boolean): string =>
+    const bindings = (grant: boolean): string =>
       JSON.stringify({
-        "pi-subagents-extend/1": { scope: ["**"], bash: { allow: ["git status"], writable } },
+        "pi-subagents-extend/1": { scope: ["**"], writeScope: grant ? ["**"] : [], bash: { allow: ["git status"] } },
       })
 
     const h = await handler({ cwd: wtDir, bindings: bindings(true) })
     const input = { command: "git status" }
-    assert.equal(await h.call("bash", input), undefined, "a writable sandbox passes the listed command")
+    assert.equal(await h.call("bash", input), undefined, "a write-scoped sandbox passes the listed command")
     const gitDir = spawnSync("git", ["rev-parse", "--absolute-git-dir"], { cwd: wtDir, encoding: "utf8", env: gitEnv }).stdout.trim()
     // .git 是文件时 rev-parse 给的是 worktree 自己的 gitdir，不是主仓 common dir。
     assert.match(gitDir, /\/worktrees\/[^/]+$/, `the worktree has its own gitdir, got: ${gitDir}`)
@@ -333,7 +335,7 @@ async function mdChild({ cwd, prompt, bindings }: { cwd: string; prompt: string;
     const live = await handler({
       cwd: wtDir,
       bindings: JSON.stringify({
-        "pi-subagents-extend/1": { scope: ["**"], bash: { allow: ["git add b.txt"], writable: true} },
+        "pi-subagents-extend/1": { scope: ["**"], writeScope: ["**"], bash: { allow: ["git add b.txt"] } },
       }),
     })
     const liveInput = { command: "git add b.txt" }
@@ -394,9 +396,9 @@ async function mdChild({ cwd, prompt, bindings }: { cwd: string; prompt: string;
     // The dispatch declares bash and its own allowlist even names the banned command:
     // exactly the payload shape that used to strip the md's deny list.
     bindings: JSON.stringify({
-      // `writable: true` so the write-class `git stash` is not refused for a second reason:
+      // Explicit write scope so the argument-path nudge cannot be the reason `git stash` is refused:
       // under the regression the only thing standing between it and execution is the md's deny.
-      "pi-subagents-extend/1": { permissions: { scope: ["src/**"], bash: { allow: ["git status", "git stash"], writable: true } } },
+      "pi-subagents-extend/1": { permissions: { scope: ["src/**"], writeScope: ["src/**"], bash: { allow: ["git status", "git stash"] } } },
     }),
   })
   const stash = await h.call("bash", { command: "git stash" })

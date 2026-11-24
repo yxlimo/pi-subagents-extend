@@ -2,7 +2,7 @@ import type { ExtensionAPI, ExtensionContext, ToolCallEvent, ToolCallEventResult
 import { homedir } from "node:os";
 import { readFileSync } from "node:fs";
 import { parse } from "yaml";
-import { allEntries, classifyCommand, commandAccess, commandMatches, deniedEntry, deniedEnvAssignment, pathCandidates, requiresNetwork, type BashRule } from "../../bash/index.ts";
+import { allEntries, commandMatches, deniedEntry, deniedEnvAssignment, pathCandidates, requiresNetwork, type BashRule } from "../../bash/index.ts";
 import { dispatchToolFaceRefusal, headEntriesHint, warnUnresolvedAgentName, warnUntrackedWorktreeProfile } from "../../notices.ts";
 import { STOP_NOTICE } from "../../probe.ts";
 import { shouldDefaultWorktree, WORKTREE_TOOLS } from "../../worktree-default.ts";
@@ -12,7 +12,7 @@ import { expandPath, privatisedDirs, resolveComparable, underRoot } from "../../
 import { buildSpec, detectPnpmStore, describeHelper, dropSpecFile, helperPath, SANDBOX_DEVICE_PATHS, scratchDir, wrapInSandbox, writeSpecFile } from "../../sandbox/index.ts";
 import type { Wiring } from "../context.ts";
 import { originalCommand } from "./original-args.ts";
-import { bail, deny, pathToolVerdict, preview, writeBail } from "./paths.ts";
+import { bail, deny, pathToolVerdict, preview } from "./paths.ts";
 
 /**
  * tool_call 的总判定（judgeToolCall）从 index.ts 的 activate() 闭包整体移入。
@@ -168,6 +168,12 @@ function bashPathArgAllowed(token: string, cwd: string, rule: BashRule, policy: 
 	// 「命令自己的临时目录」，免得 /tmp 顺带把整片宿主机路径放进来。
 	for (const dir of privatisedDirs(cwd, scratchDir(cwd, rule))) {
 		if (underRoot(resolveComparable(dir), real)) return true;
+	}
+	// 写授权里的路径本来就落在范围之外（pnpm store、mise state、报告目录、交付物）。
+	// 挡在这里等于让 writablePaths 从 bash 里不可用，而那正是给它们的用途。
+	for (const write of [...policy.absoluteWrite, ...rule.writablePaths]) {
+		const abs = expandPath(cwd, write);
+		if (abs && (underRoot(abs, real) || underRoot(resolveComparable(abs), real))) return true;
 	}
 	return SANDBOX_DEVICE_PATHS.some((device) => underRoot(device, real));
 }
@@ -443,8 +449,8 @@ export const judgeToolCall = async ({
 				`pi-subagents-extend: bash refused: the leading assignment "${deniedEnv}=…" can change which program runs or load code into it, which would let an allowlisted command run arbitrary code. Drop it, or have the parent set it in bash.env. Refused: ${preview([command])}`,
 			);
 		}
-		const match = classifyCommand(rule, command);
-		if (!match) {
+		const allowed = rule.allow.some((entry) => commandMatches(entry, command));
+		if (!allowed) {
 			// 模型能看见这段文案，所以把它需要的路径直接写进去，省得它再猜。
 			const store = detectPnpmStore(cwd);
 			const storeHint = store.path
@@ -459,29 +465,16 @@ export const judgeToolCall = async ({
 				`pi-subagents-extend: command not in the allowlist: "${preview([command])}" — allowed: ${preview(allEntries(rule))} (source: ${w.policy.source})${storeHint}${headHint}`,
 			);
 		}
-		// allow 列放行的写类命令，role 却没给写权限：这是写拒，计入写预算而非撞权限预算。
-		// 白名单放行的写类命令，role 却没给写权限：这是写拒，计入写预算而非撞权限预算。
-		// 判据是「确实有一条 allow 授权」+ 命令本身会写 + writable:false；classifyCommand 在
-		// writable=false 时已把 access 压成 read，所以这里用固有判定（传 true）认出「这条命令
-		// 本来会写」，否则它会以只读的名义被放行去写。
-		if (rule.allow.some((entry) => commandMatches(entry, command)) && rule.writable === false && commandAccess(command, true) === "write") {
-			return writeBail(
-				w,
-				`pi-subagents-extend: the role may run this command (it is in bash.allow), but bash.writable: false gives no write access: "${preview([command])}". This is a write refusal, not a grant error — deliver the result as a report, or have the parent set bash.writable: true.`
-			);
-		}
-		// 只读类命令的参数路径：沙箱读面是 `/`（工具链要读 /nix/store），所以路径引导放在插件层。
+		// 参数里的路径：沙箱读面是 `/`（工具链要读 /nix/store），所以路径引导放在插件层。
 		// 位置在元字符与注入型赋值之后：前两条决定「这条命令能不能跑」，这一条只是把参数里的
-		// 路径引回范围。
-		if (match.access === "read") {
-			const foreign = foreignBashPath(command, cwd, rule, w.policy);
-			if (foreign) {
-				// 计入撞权限预算（bail）：父代理放宽范围就能解决，正是这一类。
-				return bail(
-					w,
-					`pi-subagents-extend: "${foreign}" is outside the working tree (source: ${w.policy.source}). This is a path nudge, not a wall: the command runs in ${cwd}, and a file outside it is not yours to read — say what you need from it instead.\nWorking tree: ${cwd}`,
-				);
-			}
+		// 路径引回范围。写不写不由这里判 —— 写不出去会被 Landlock 拦，那是内核给的答案。
+		const foreign = foreignBashPath(command, cwd, rule, w.policy);
+		if (foreign) {
+			// 计入撞权限预算（bail）：父代理放宽范围就能解决，正是这一类。
+			return bail(
+				w,
+				`pi-subagents-extend: "${foreign}" is outside the working tree (source: ${w.policy.source}). This is a path nudge, not a wall: the command runs in ${cwd}, and a file outside it is not yours to read — say what you need from it instead.\nWorking tree: ${cwd}`,
+			);
 		}
 		// 离线时网络是裸 netns：包被丢弃而不是被拒绝，curl 这类命令没有输出也没有错误，
 		// 事后注解等不到触发文本，只能挂到超时。所以在 spawn 之前按名单拒掉确定要往返的
@@ -495,7 +488,7 @@ export const judgeToolCall = async ({
 				);
 			}
 		}
-		const repeatEvent = w.probe?.noteBashStart(command, match.access, event.toolCallId);
+		const repeatEvent = w.probe?.noteBashStart(command, event.toolCallId);
 		if (repeatEvent) {
 			return repeatEvent.stop
 				? w.stop(repeatEvent.reason)

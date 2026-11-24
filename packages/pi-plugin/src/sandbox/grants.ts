@@ -187,6 +187,21 @@ function writablePaths(policy: Policy, cwd: string): string[] {
 	return [...paths];
 }
 
+
+/**
+ * 这个任务到底有没有写授权：写范围（writeScope，省略时等于 scope）、显式 writablePaths、
+ * 交付物文件，三者全空就是一个只读任务。只读不是靠一个布尔开关表达的，而是靠目录配置为空——
+ * 所以这里读的正是目录配置本身。
+ *
+ * 判的是**声明**而不是展开结果：写范围指向还不存在的文件是常态（任务本来就要创建它），
+ * 若拿「展开后有几个现存文件」当判据，这种任务连 git 索引与产物目录都拿不到，
+ * 第一条写命令就直接死在 Landlock 上。
+ */
+export function hasWriteGrant(policy: Policy, rule: BashRule): boolean {
+	if (rule.writablePaths.length > 0) return true;
+	if (deliverableTargetPath) return true;
+	return policy.writeGlobs.length > 0 || policy.absoluteWrite.length > 0;
+}
 /**
  * 产物目录：探测结果 + 显式追加。已存在的直接放行；探测到的主产物缺了就创建，
  * 其余缺了不管（空目录本身没有意义）；显式追加的缺了也创建 —— 那是父代理点名的。
@@ -255,14 +270,15 @@ export function toolchainCacheDir(): string | undefined {
 
 /**
  * 沙箱里要绑成可写的路径集合：
- * - 写范围覆盖到的路径（bash.writable 时）：整棵子树的 glob 给目录，文件级 glob 给文件
+ * - 写范围覆盖到的路径：整棵子树的 glob 给目录，文件级 glob 给文件
  * - git 真正要写的目录（见 gitWritablePaths）：不给的话 add / commit / stash 全拼在 index.lock 上
  * - `<cwd>/node_modules`：pnpm install 要写 .bin 里的 shim；worktree 里它是软链，给真实路径
  * - 项目声明的产物目录 + 工具链缓存目录（XDG_CACHE_HOME）
- * - bash.writablePaths 里的全局可写区（pnpm store、mise state 等；bash.writable 时）
+ * - bash.writablePaths 里的全局可写区（pnpm store、mise state 等）
  *
  * cwd 本身不在其中：整棵授权等于把整个 checkout 打开，读范围的宽窄不该自动变成写权限。
- * 各项都以 bash.writable 为前提：false 是角色自己定下的上限，任何一层都不该把它放宽。
+ * 没有写授权（写范围、writablePaths、交付物全空）时一个路径都不给，连 .git 与 node_modules
+ * 都不给：只读任务不该留下植入 hook 的口子。
  */
 export function sandboxWritableDirs(
 	policy: Policy,
@@ -271,7 +287,9 @@ export function sandboxWritableDirs(
 	options: { create: boolean } = { create: true },
 ): string[] {
 	const dirs = new Set<string>();
-	if (rule.writable) {
+	if (hasWriteGrant(policy, rule)) {
+		// 写范围本身：整棵子树的写法给目录本身（这样命令能在里面新建文件），文件级写法
+		// 只给实际存在的文件。这一条是写授权的主体，下面几条都是它带来的必要补充。
 		for (const dir of writablePaths(policy, cwd)) dirs.add(dir);
 		// git 的索引与 ref 必须可写，否则 add / commit / stash 全拼在 index.lock 上；但只给
 		// git 真正要写的部分，不因此把整个 checkout 打开。linked worktree 的索引在

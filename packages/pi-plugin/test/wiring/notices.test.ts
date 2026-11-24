@@ -204,7 +204,7 @@ function unreachableEntries(entries: string[], cwd: string): UnreachableEntry[] 
 	writeFileSync(join(tree, "pkg-a", "package.json"), JSON.stringify({ scripts: { lint: "eslint ." } }))
 	const h = await handler({
 		cwd: tree,
-		bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { allow: ["pnpm run typecheck"], writable: true} } }),
+		bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], writeScope: ["."], bash: { allow: ["pnpm run typecheck"]} } }),
 	})
 	const found = unreachableEntries(["pnpm run typecheck"], tree)
 	assert.equal(found[0]?.fix, undefined, "no fix is invented when the only candidate lacks the script")
@@ -291,7 +291,7 @@ function unreachableEntries(entries: string[], cwd: string): UnreachableEntry[] 
 	const tree = mkdtempSync(join(tmpdir(), "pi-subagents-extend-wide-entry-"))
 	const h = await handler({
 		cwd: tree,
-		bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { allow: ["pnpm"], writable: true } } }),
+		bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], writeScope: ["."], bash: { allow: ["pnpm"] } } }),
 	})
 	// 正控：条目本身确实被报成不可达，否则「没有注解」证明不了任何事。
 	assert.match(h.ui.join("\n"), /can never match/, "the wide entry is reported as unreachable")

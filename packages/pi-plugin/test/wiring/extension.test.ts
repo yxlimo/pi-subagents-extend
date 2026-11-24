@@ -158,6 +158,7 @@ import { restoreState } from "../support.ts"
     bindings: JSON.stringify({
       "pi-subagents-extend/1": {
         scope: ["src/**"],
+        writeScope: [],
         bash: { allow: ["git status", "cat src/a.ts"]},
       },
     }),
@@ -213,14 +214,15 @@ import { restoreState } from "../support.ts"
   console.log("  ok   没配 bash 白名单时 bash 仍然关闭，拒绝文案给出开法")
 }
 
-// 14. writable + network options, and a missing helper fails closed.
+// 14. write scope + network options, and a missing helper fails closed.
 {
   mkdirSync(join(workdir, "src/auth"), { recursive: true })
   const h = await handler({
     bindings: JSON.stringify({
       "pi-subagents-extend/1": {
         scope: ["src/**"],
-        bash: { allow: ["node harness.mjs"], writable: true, network: true},
+        writeScope: ["src/**"],
+        bash: { allow: ["node harness.mjs"], network: true},
       },
     }),
   })
@@ -237,7 +239,7 @@ import { restoreState } from "../support.ts"
   const previous = process.env.PI_SUBAGENTS_EXTEND_HELPER_PATH
   process.env.PI_SUBAGENTS_EXTEND_HELPER_PATH = "/nonexistent/pi-subagents-extend-helper"
   const h2 = await handler({
-    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["node harness.mjs"], writable: true} } }),
+    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["src/**"], writeScope: ["src/**"], bash: { allow: ["node harness.mjs"] } } }),
   })
   const missing = await h2.call("bash", { command: "node harness.mjs" })
   assert.equal(missing?.block, true, "no helper means no bash, even for a listed command")
@@ -245,7 +247,7 @@ import { restoreState } from "../support.ts"
   h2.restore()
   if (previous === undefined) delete process.env.PI_SUBAGENTS_EXTEND_HELPER_PATH
   else process.env.PI_SUBAGENTS_EXTEND_HELPER_PATH = previous
-  console.log("  ok   writable/network 选项写进 spec；找不到 helper 时 fail closed")
+  console.log("  ok   write scope/network 选项写进 spec；找不到 helper 时 fail closed")
 }
 
 
@@ -256,7 +258,8 @@ import { restoreState } from "../support.ts"
     bindings: JSON.stringify({
       "pi-subagents-extend/1": {
         scope: ["src/**"],
-        bash: { allow: ["pnpm run typecheck", "re: ^tsc --noEmit$", "re: ^pnpm -r (test|build)"], writable: true},
+        writeScope: ["src/**"],
+        bash: { allow: ["pnpm run typecheck", "re: ^tsc --noEmit$", "re: ^pnpm -r (test|build)"] },
       },
     }),
   })
@@ -274,27 +277,6 @@ import { restoreState } from "../support.ts"
   console.log("  ok   bash 白名单支持字面量前缀与 re: 正则，元字符仍先拒")
 }
 
-// 17. Access classification: a write-listed command resets the idle probe, a read-listed one does not.
-{
-  const { Probe } = await import(join(repo, "src", "probe.ts"))
-  const clock = fakeClock()
-  const p = new Probe({
-    config: { ...defaultProbe(), idleWriteMs: 1000, abortGraceMs: 1000 },
-    readOnly: false,
-    hooks: { warn: () => {} },
-    host: clock.host,
-  })
-  // Read-only command: idle window survives the call.
-  p.noteBashStart("pnpm run typecheck", "read")
-  clock.advance(1000)
-  assert.equal(p.atToolBoundary()?.stop, false, "read-only bash does not count as write activity")
-  // A write-listed command resets it.
-  p.noteBashStart("pnpm test", "write")
-  clock.advance(999)
-  assert.equal(p.atToolBoundary(), undefined, "write-listed bash resets the idle window")
-  p.dispose()
-  console.log("  ok   read 列 bash 不重置空转计时器，write 列重置")
-}
 
 // 18. Idle probe: warn at the boundary, stop once the grace runs out.
 {
@@ -332,8 +314,8 @@ import { restoreState } from "../support.ts"
 }
 
 // 19. Repeat probe: same bash command warns then stops.
-//     只数读类命令：写活动（edit/write 工具、命中 write 列的命令）算进展，计数会被清零，
-//     见测试 57。这条判据的语义是「同一件事没有进展地重复」。
+//     只数读类命令：写活动（edit/write 工具）算进展，计数会被清零，
+//     写活动只由 edit/write 工具交给探针，bash 命令不再自带写身份。
 {
   const { Probe } = await import(join(repo, "src", "probe.ts"))
   const clock = fakeClock()
@@ -343,15 +325,15 @@ import { restoreState } from "../support.ts"
     hooks: { warn: () => {} },
     host: clock.host,
   })
-  p.noteBashStart("pnpm test", "read")
-  p.noteBashStart("pnpm test", "read")
+  p.noteBashStart("pnpm test")
+  p.noteBashStart("pnpm test")
   assert.equal(p.atToolBoundary(), undefined, "below the threshold nothing happens")
-  p.noteBashStart("pnpm test", "read")
+  p.noteBashStart("pnpm test")
   assert.equal(p.atToolBoundary()?.stop, false, "the Nth repeat warns")
-  const stop = p.noteBashStart("pnpm test", "read")
+  const stop = p.noteBashStart("pnpm test")
   assert.equal(stop?.stop, true, "one more repeat stops the run")
   p.dispose()
-  console.log("  ok   原地打转：第 3 次 warn，第 4 次停止（只数读类命令）")
+  console.log("  ok   原地打转：第 3 次 warn，第 4 次停止（写活动会清零计数）")
 }
 
 // 20. Junk-file probe blocks probe artifacts; deny budget warns then stops.
@@ -443,7 +425,7 @@ import { restoreState } from "../support.ts"
       "pi-subagents-extend/1": {
         scope: ["src/**", "lib/**"],
         writeScope: ["src/**"],
-        bash: { allow: ["pnpm install"], writable: true},
+        bash: { allow: ["pnpm install"] },
       },
     }),
   })

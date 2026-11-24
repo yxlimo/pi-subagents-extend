@@ -25,7 +25,7 @@ import { handler, repo, workdir } from "../harness.ts"
   writeFileSync(join(tree, "packages", "pi-plugin", "package.json"), JSON.stringify({ scripts: { typecheck: "tsc" } }))
   const h = await handler({
     cwd: tree,
-    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { allow: ["pnpm run typecheck"], writable: true} } }),
+    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], writeScope: ["."], bash: { allow: ["pnpm run typecheck"]} } }),
   })
   const notices = h.ui.join("\n")
   assert.match(notices, /can never match/, "session_start warns about entries that can never match")
@@ -42,7 +42,7 @@ import { handler, repo, workdir } from "../harness.ts"
   const tree = mkdtempSync(join(tmpdir(), "pi-subagents-extend-unreach-deny-"))
   const h = await handler({
     cwd: tree,
-    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { allow: ["pnpm run lint"], writable: true} } }),
+    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], writeScope: ["."], bash: { allow: ["pnpm run lint"]} } }),
   })
   const refused = await h.call("bash", { command: "pnpm run typecheck" })
   assert.equal(refused?.block, true, "a command missing from the allowlist is refused")
@@ -61,7 +61,7 @@ import { handler, repo, workdir } from "../harness.ts"
   const tree = mkdtempSync(join(tmpdir(), "pi-subagents-extend-unreach-other-"))
   const h = await handler({
     cwd: tree,
-    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { allow: ["pnpm run typecheck"], writable: true} } }),
+    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], writeScope: ["."], bash: { allow: ["pnpm run typecheck"]} } }),
   })
   const refused = await h.call("bash", { command: "rg foo x.ts" })
   assert.equal(refused?.block, true, "a command missing from the allowlist is refused")
@@ -81,7 +81,7 @@ import { handler, repo, workdir } from "../harness.ts"
 	writeFileSync(join(tree, "packages", "pi-plugin", "package.json"), JSON.stringify({ scripts: { typecheck: "tsc" } }))
 	const h = await handler({
 		cwd: tree,
-		bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { allow: ["pnpm run typecheck"], writable: true} } }),
+		bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], writeScope: ["."], bash: { allow: ["pnpm run typecheck"]} } }),
 	})
 	assert.equal(await h.call("bash", { command: "pnpm run typecheck" }), undefined, "the entry is allowlisted, so the command runs")
 	const failed = await h.result("bash", "ERR_PNPM_NO_PKG_MANIFEST  No package.json found", true)
@@ -108,7 +108,7 @@ import { handler, repo, workdir } from "../harness.ts"
 	const h = await handler({
 		cwd: tree,
 		bindings: JSON.stringify({
-			"pi-subagents-extend/1": { scope: ["."], bash: { allow: ["pnpm --dir packages/a run build", "pnpm run typecheck"], writable: true} },
+			"pi-subagents-extend/1": { scope: ["."], writeScope: ["."], bash: { allow: ["pnpm --dir packages/a run build", "pnpm run typecheck"]} },
 		}),
 	})
 	const reachable = "pnpm --dir packages/a run build"
@@ -140,7 +140,7 @@ import { handler, repo, workdir } from "../harness.ts"
 	}
 	const h = await handler({
 		cwd: tree,
-		bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { allow: ["pnpm run build"], writable: true} } }),
+		bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], writeScope: ["."], bash: { allow: ["pnpm run build"]} } }),
 	})
 	const notices = h.ui.join("\n")
 	assert.match(notices, /… and 2 more/, "the session warning stops at eight candidates and counts the rest")
@@ -165,7 +165,7 @@ import { handler, repo, workdir } from "../harness.ts"
 	const h = await handler({
 		cwd: tree,
 		bindings: JSON.stringify({
-			"pi-subagents-extend/1": { scope: ["."], bash: { allow: ["pnpm --dir packages/a run build", "pnpm"], writable: true} },
+			"pi-subagents-extend/1": { scope: ["."], writeScope: ["."], bash: { allow: ["pnpm --dir packages/a run build", "pnpm"]} },
 		}),
 	})
 	const exact = "pnpm --dir packages/a run build"
@@ -194,7 +194,7 @@ import { handler, repo, workdir } from "../harness.ts"
 	}
 	const h = await handler({
 		cwd: tree,
-		bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { allow: ["pnpm run build"], writable: true} } }),
+		bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], writeScope: ["."], bash: { allow: ["pnpm run build"]} } }),
 	})
 	const notices = h.ui.join("\n")
 	assert.match(notices, /only the first 8 are listed/, "the warning says the list is not complete")
@@ -237,7 +237,7 @@ import { handler, repo, workdir } from "../harness.ts"
 	}
 	const h = await handler({
 		cwd: tree,
-		bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], maxDenies: 0, bash: { allow: ["pnpm run build"], writable: true} } }),
+		bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], writeScope: ["."], maxDenies: 0, bash: { allow: ["pnpm run build"]} } }),
 	})
 	const denied = await h.call("bash", { command: "pnpm run other" })
 	assert.equal(denied?.block, true, "a command outside the entry is refused")

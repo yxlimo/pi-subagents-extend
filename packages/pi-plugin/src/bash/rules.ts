@@ -8,22 +8,21 @@
  * 不自动探测正则：命令参数本身就常含 `*`、`.`、`(`（glob 输入、shell 分支），
  * 猜错方向是误授权，比误拒绝危险得多。
  *
- * 读写归类供探针使用：allow 单列用 commandAccess 从命令本身判读写。
+ * 本层只回答「这条命令在不在白名单里」。命令会不会写、写不写得出去，不在这里判 ——
+ * 写是目录授权（writeScope / writablePaths）与内核（Landlock）的事。
  *
- * 从 bash/index.ts 拆出来的规则层：白名单的匹配、归类与 bash 配置的解析。
+ * 从 bash/index.ts 拆出来的规则层：白名单的匹配与 bash 配置的解析。
  * 两层接线（角色 md 基线逐字段补进派单载荷、bash.deny 并集作硬底线）在
  * wiring/context.ts 的 applyRoleBaseline。
  * bash/index.ts 仍是唯一入口，这里的东西由它转出口。
  */
 
 import { leadingAssignments } from "./env.ts";
-import { commandAccess } from "./programs.ts";
 import { RE_PREFIX, tokens } from "./tokens.ts";
 
-export type BashAccess = "read" | "write";
 
 export interface BashRule {
-	/** 白名单单列：读写由 commandAccess 从命令本身判，不预先分列。 */
+	/** 白名单：只回答「这条命令能不能跑」。写不写由沙箱的目录授权决定，不在这里判。 */
 	allow: string[];
 	/** 允许网络（默认关闭，沙箱内使用私有网络命名空间）。 */
 	network: boolean;
@@ -60,11 +59,6 @@ export interface BashRule {
 	gitExcludes: boolean;
 }
 
-export interface BashMatch {
-	access: BashAccess;
-	/** 命中的条目原文，用于拒绝文案与诊断。 */
-	entry: string;
-}
 
 /**
  * 单条模式是否匹配整条命令。`re:` 条目按正则整串匹配；否则按 token 前缀匹配。
@@ -91,14 +85,6 @@ export function commandMatches(pattern: string, command: string): boolean {
 	return want.every((token, i) => have[i] === token);
 }
 
-/**
- * 归类一条命令：命中 allow 单列，读写由 commandAccess 从命令本身推出来。
- */
-export function classifyCommand(rule: BashRule, command: string): BashMatch | undefined {
-	const allow = rule.allow.find((entry) => commandMatches(entry, command));
-	if (allow !== undefined) return { access: commandAccess(command, rule.writable), entry: allow };
-	return undefined;
-}
 
 /** 全部条目（供拒绝文案与诊断）。 */
 export function allEntries(rule: BashRule): string[] {
@@ -129,8 +115,7 @@ function stringMap(value: unknown): Record<string, string> {
 }
 
 /**
- * 解析 bindings 里的 bash 字段。没写、写坏、三列都空都返回 undefined（= 拒绝 bash）。
- * `read` / `write` 是兼容列，含义照旧；`allow` 是新的单列，读写留给 commandAccess 判。
+ * 解析 bindings 里的 bash 字段。没写、写坏、没给白名单都返回 undefined（= 拒绝 bash）。
  */
 export function parseBashRule(raw: unknown): BashRule | undefined {
 	if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;

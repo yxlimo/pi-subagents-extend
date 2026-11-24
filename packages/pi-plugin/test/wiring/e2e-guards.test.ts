@@ -253,7 +253,7 @@ async function runDispatch(fixture: string, project: string): Promise<DispatchOu
 			project,
 			bindings: {
 				"pi-subagents-extend/1": {
-					permissions: { scope: ["src/**"], bash: { allow: ["pnpm test"], writable: true } },
+					permissions: { scope: ["src/**"], writeScope: ["src/**"], bash: { allow: ["pnpm test"] } },
 				},
 			},
 		});
@@ -308,7 +308,7 @@ async function runDispatch(fixture: string, project: string): Promise<DispatchOu
 			project,
 			bindings: {
 				"pi-subagents-extend/1": {
-					permissions: { scope: ["src/**"], bash: { allow: ["echo", "touch"], writable: true } },
+					permissions: { scope: ["src/**"], writeScope: ["src/**"], bash: { allow: ["echo", "touch"] } },
 				},
 			},
 			steps: [

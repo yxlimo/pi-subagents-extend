@@ -89,7 +89,7 @@ import { handler, specOf, specPathOf, workdir, stateDir, ext } from "../harness.
   const h = await handler({
     cwd: workdir,
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["."], bash: { allow: ["ls", "git status"], writable: true } },
+      "pi-subagents-extend/1": { scope: ["."], writeScope: ["."], bash: { allow: ["ls", "git status"] } },
     }),
   })
   const first = { command: "ls" }
@@ -192,8 +192,8 @@ import { handler, specOf, specPathOf, workdir, stateDir, ext } from "../harness.
     cwd: tree,
     bindings: JSON.stringify({
       "pi-subagents-extend/1": {
-        scope: ["."],
-        bash: { allow: ["git status", "node", "re:^ls -la$"], writable: true },
+        scope: ["."], writeScope: ["."],
+        bash: { allow: ["git status", "node", "re:^ls -la$"] },
       },
     }),
   })
@@ -282,8 +282,8 @@ import { handler, specOf, specPathOf, workdir, stateDir, ext } from "../harness.
   const h = await handler({
     bindings: JSON.stringify({
       "pi-subagents-extend/1": {
-        scope: ["src/**"],
-        bash: { allow: ["git status"], writable: true, writablePaths: [grant] },
+        scope: ["src/**"], writeScope: ["src/**"],
+        bash: { allow: ["git status"], writablePaths: [grant] },
       },
     }),
     cwd: outsideTmp,
@@ -310,8 +310,8 @@ import { handler, specOf, specPathOf, workdir, stateDir, ext } from "../harness.
   const nextSession = await handler({
     bindings: JSON.stringify({
       "pi-subagents-extend/1": {
-        scope: ["src/**"],
-        bash: { allow: ["git status"], writable: true, writablePaths: [grant] },
+        scope: ["src/**"], writeScope: ["src/**"],
+        bash: { allow: ["git status"], writablePaths: [grant] },
       },
     }),
     cwd: outsideTmp,
@@ -332,8 +332,8 @@ import { handler, specOf, specPathOf, workdir, stateDir, ext } from "../harness.
   const tree = await handler({
     bindings: JSON.stringify({
       "pi-subagents-extend/1": {
-        scope: ["src/**"],
-        bash: { allow: ["git status"], writable: true, writablePaths: [inside] },
+        scope: ["src/**"], writeScope: ["src/**"],
+        bash: { allow: ["git status"], writablePaths: [inside] },
       },
     }),
     cwd: outsideTmp,
@@ -363,8 +363,8 @@ import { handler, specOf, specPathOf, workdir, stateDir, ext } from "../harness.
   const h = await handler({
     bindings: JSON.stringify({
       "pi-subagents-extend/1": {
-        scope: ["src/**"],
-        bash: { allow: ["git status"], writable: true, writablePaths: [grantViaLink] },
+        scope: ["src/**"], writeScope: ["src/**"],
+        bash: { allow: ["git status"], writablePaths: [grantViaLink] },
       },
     }),
     cwd: outsideTmp,
@@ -404,8 +404,8 @@ import { handler, specOf, specPathOf, workdir, stateDir, ext } from "../harness.
   const tree = await handler({
     bindings: JSON.stringify({
       "pi-subagents-extend/1": {
-        scope: ["src/**"],
-        bash: { allow: ["git status"], writable: true, writablePaths: [grantInside] },
+        scope: ["src/**"], writeScope: ["src/**"],
+        bash: { allow: ["git status"], writablePaths: [grantInside] },
       },
     }),
     cwd: outsideTmp,

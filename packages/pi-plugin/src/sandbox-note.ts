@@ -94,20 +94,14 @@ export function cpuStallNote(text: string): string | undefined {
  * @param text bash 工具结果的纯文本
  * @param granted 这条命令的可写清单（`spec.write`，宿主侧的绝对路径）
  * @param cwd 命令的 cwd，用来解析相对路径
- * @param unknownProgram 命中的是表里没有的程序，插件判不出它会不会写
- * @param writableCeiling 角色有没有写授权：决定求援口径，以及「判不出」那句是否成立
  */
-export function writeRefusalNote(text: string, granted: string[], cwd: string, unknownProgram = false, writableCeiling = true): string | undefined {
+export function writeRefusalNote(text: string, granted: string[], cwd: string): string | undefined {
 	if (!text || text.includes(MARK) || !granted.length) return undefined
 	const roots = granted.map((dir) => realOrSelf(dir))
 	const refused = firstRefusedOutside(text, roots, cwd)
 	if (!refused) return undefined
 	const shown = roots.length > 3 ? `${roots.slice(0, 3).join(", ")} …` : roots.join(", ")
-	const advice = writableCeiling
-		? "use contact_supervisor to ask for writablePaths."
-		: "use contact_supervisor to ask for bash.writable: true.";
-	const cause = unknownProgram && !writableCeiling ? " The plugin could not tell that this program writes, so it was not treated as a write." : "";
-	return `${MARK} ${refused} is outside the writes the parent granted (${shown}) — a permission, not a filesystem fault. Writing elsewhere will not help; ${advice}${cause}`
+	return `${MARK} ${refused} is outside the writes the parent granted (${shown}) — a permission, not a filesystem fault. Writing elsewhere will not help; use contact_supervisor to ask for writablePaths or a wider write scope.`
 }
 
 /** 第一条「路径在授权外、而宿主读得到」的拒绝目标；没有就 undefined。 */

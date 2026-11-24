@@ -12,7 +12,7 @@ import { described, testState } from "../support.ts"
 // 47. Build/test artefact directories are derived from what the project uses.
 {
   const bindings = (extra: Record<string, unknown>): string =>
-    JSON.stringify({ "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["pnpm test"], writable: true, ...extra} } })
+    JSON.stringify({ "pi-subagents-extend/1": { scope: ["src/**"], writeScope: ["src/**"], bash: { allow: ["pnpm test"], ...extra} } })
   const grantedIn = (spec: SandboxSpec, ...parts: string[]): boolean => spec.write.some((d: string) => d.endsWith(`/${join(...parts)}`))
 
   // A Node project: the toolchain is recognised, but its output directory is not
@@ -89,7 +89,7 @@ import { described, testState } from "../support.ts"
   const h = await handler({
     cwd: repo,
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["pnpm test"], writable: true } },
+      "pi-subagents-extend/1": { scope: ["src/**"], writeScope: ["src/**"], bash: { allow: ["pnpm test"] } },
     }),
   })
   const notified: string[] = []
@@ -139,7 +139,7 @@ import { described, testState } from "../support.ts"
     const out = await runLive(
       dir,
       JSON.stringify({
-        "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["cargo test"], writable: true} },
+        "pi-subagents-extend/1": { scope: ["src/**"], writeScope: ["src/**"], bash: { allow: ["cargo test"]} },
       }),
       "cargo test --offline",
     )
@@ -167,7 +167,7 @@ import { described, testState } from "../support.ts"
     const out = await runLive(
       dir,
       JSON.stringify({
-        "pi-subagents-extend/1": { scope: ["*.go"], bash: { allow: ["go test"], writable: true} },
+        "pi-subagents-extend/1": { scope: ["*.go"], writeScope: ["*.go"], bash: { allow: ["go test"]} },
       }),
       "go test ./...",
     )
@@ -188,7 +188,7 @@ import { described, testState } from "../support.ts"
 {
   const h = await handler({
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["python3", "echo", "node"], writable: true } },
+      "pi-subagents-extend/1": { scope: ["src/**"], writeScope: ["src/**"], bash: { allow: ["python3", "echo", "node"] } },
     }),
   })
   const allowed = async (command: string, why: string): Promise<void> => {
@@ -222,21 +222,18 @@ import { described, testState } from "../support.ts"
 
 // 57. 打转判据是「同一件事没有进展地重复」：写活动就是进展，计数清零、已发出的 warn 撤掉。
 //      dogfooding 实测的误杀：一个 coder 子代理第 3 次跑同一条测试收到 warn，中途改了代码，
-//      宽限到期照样被停。写类命令按定义就是改动，因此不再受这条判据约束。
+//      宽限到期照样被停。写活动由 edit/write 工具交给探针，bash 命令不再自带写身份。
 {
   const h = await handler({
     bindings: JSON.stringify({
       "pi-subagents-extend/1": {
         scope: ["src/**"],
-        bash: { allow: ["node test/x.ts", "pnpm run fix", "cat src/a.ts"], writable: true},
+        writeScope: ["src/**"],
+        bash: { allow: ["node test/x.ts", "pnpm run fix", "cat src/a.ts"] },
       },
     }),
   })
 
-  // 写类命令反复执行：每一次都是改动，不算打转
-  for (let i = 0; i < 5; i += 1) {
-    assert.equal(await h.call("bash", { command: "pnpm run fix" }), undefined, `write-class repeat ${i + 1} runs`)
-  }
 
   // 读类命令之间做一次改动（编辑文件），也不该被判打转
   for (let i = 0; i < 4; i += 1) {
@@ -303,13 +300,20 @@ import { described, testState } from "../support.ts"
       mkdirSync(plantedDir, { recursive: true })
       const planted = join(plantedDir, "planted.txt")
       writeFileSync(join(wtDir, "write.sh"), "#!/bin/sh\nprintf 'x\\n' > \"$1\"\n")
+      // 目标路径必须由脚本自己算出来，不能写在命令行上：命令行里出现一棵树外的字面路径，
+      // 会在 tool_call 就被插件层的路径引导拒掉，于是这里测的就不是内核了。脚本自己问
+      // git 要 common dir，命令行走的是脚本名加一个树内的相对路径。
+      writeFileSync(
+        join(wtDir, "hook.sh"),
+        "#!/bin/sh\ncommon=$(git rev-parse --git-common-dir)\ncase \"$common\" in /*) ;; *) common=\"$PWD/$common\" ;; esac\nprintf 'x\\n' > \"$common/$1\"\n",
+      )
       const h = await handler({
         cwd: wtDir,
         bindings: JSON.stringify({
           "pi-subagents-extend/1": {
             scope: ["**"],
             writeScope: ["planted"],
-            bash: { allow: ["git add b.txt", "sh write.sh"], writable: true},
+            bash: { allow: ["git add b.txt", "sh write.sh", "sh hook.sh hooks/pre-commit", "sh hook.sh config"] },
           },
         }),
       })
@@ -322,8 +326,8 @@ import { described, testState } from "../support.ts"
       }
       const addCommand = await sandboxed("git add b.txt", "add")
       const controlCommand = await sandboxed(`sh write.sh ${planted}`, "control")
-      const hookCommand = await sandboxed(`sh write.sh ${hookPath}`, "hook")
-      const configCommand = await sandboxed(`sh write.sh ${configPath}`, "config")
+      const hookCommand = await sandboxed("sh hook.sh hooks/pre-commit", "hook")
+      const configCommand = await sandboxed("sh hook.sh config", "config")
       h.restore()
 
       // 授权面：hooks 与 config 都不在清单里（否则下面的真实执行只是在验证另一个事实）。
@@ -379,7 +383,7 @@ import { described, testState } from "../support.ts"
 
     const bindingsFor = (writeScope: string[]): string =>
       JSON.stringify({
-        "pi-subagents-extend/1": { scope: ["src/**"], writeScope, bash: { allow: ["sh write.sh"], writable: true} },
+        "pi-subagents-extend/1": { scope: ["src/**"], writeScope, bash: { allow: ["sh write.sh"]} },
       })
     const sandboxed = async (h: Harness, command: string): Promise<string> => {
       const input = { command }

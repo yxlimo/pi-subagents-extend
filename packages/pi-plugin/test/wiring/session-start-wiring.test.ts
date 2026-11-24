@@ -44,7 +44,8 @@ const rc = (await import(join(repo, "src", "role-config.ts"))) as unknown as typ
   const bindings = JSON.stringify({
     "pi-subagents-extend/1": {
       scope: ["."],
-      bash: { allow: ["git status"], writable: true},
+      writeScope: ["."],
+      bash: { allow: ["git status"] },
     },
   })
   const run = await childRun({
@@ -310,7 +311,7 @@ const rc = (await import(join(repo, "src", "role-config.ts"))) as unknown as typ
   const notified: string[] = []
   await h.commands["permission"].handler("", { cwd: workdir, ui: { notify: (m: string) => notified.push(m) } })
   const text = notified.join("\n")
-  assert.match(text, /bash allow \(no write access: commands that write are refused\): ls a/, "the allow column shows the allow entry")
+  assert.match(text, /^bash allow: ls a/m, "the allow column shows the allow entry")
 
   h.restore()
   console.log("  ok   /permission prints the allow column with its entries")

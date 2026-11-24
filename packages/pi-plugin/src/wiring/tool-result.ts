@@ -1,6 +1,5 @@
 import type { ToolResultEvent, ToolResultEventResult } from "@earendil-works/pi-coding-agent";
 import { rmSync } from "node:fs";
-import { classifyCommand, isUnknownProgram } from "../bash/index.ts";
 import { handoffHintFor, withHint } from "../handoff-hint.ts";
 import { unreachableCommandNote } from "../notices.ts";
 import { cpuStallNote, networkFailureNote, writeRefusalNote } from "../sandbox-note.ts";
@@ -44,12 +43,6 @@ export function annotateToolResult(w: Wiring, event: ToolResultEvent): ToolResul
 			}
 		}
 	}
-	// allow 列里表里没有的程序跑成只读、随后写越界时，注解要说清为什么它是只读的。
-	let readOnlyAllow = false;
-	if (isBash && ran && w.policy.bash) {
-		const bashMatch = classifyCommand(w.policy.bash, ran.command);
-		readOnlyAllow = bashMatch?.access === "read" && isUnknownProgram(ran.command);
-	}
 	const hints = [
 		handoffHintFor(text),
 		// 两道注解都以「这条命令真的失败了」为前提。不看 isError 时，成功命令的**输出内容**里
@@ -58,7 +51,7 @@ export function annotateToolResult(w: Wiring, event: ToolResultEvent): ToolResul
 		// 判断事实而不猜文案：工具结果自带 isError。
 		isBash && event.isError ? networkFailureNote(text, offline) : undefined,
 		isBash && event.isError ? cpuStallNote(text) : undefined,
-		isBash && ran && event.isError ? writeRefusalNote(text, ran.write, ran.cwd, readOnlyAllow, w.policy.bash?.writable ?? true) : undefined,
+		isBash && ran && event.isError ? writeRefusalNote(text, ran.write, ran.cwd) : undefined,
 		isBash && ran && event.isError && w.policy.bash
 			? unreachableCommandNote(text, ran.command, w.policy.bash, ran.cwd)
 			: undefined,

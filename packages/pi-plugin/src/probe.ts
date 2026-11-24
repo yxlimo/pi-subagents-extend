@@ -217,10 +217,9 @@ export class Probe {
 		this.#startIdleTimer();
 	}
 
-	/** bash 命令进入：判据 2 计数；命中 write 列时也记为写入活动。 */
-	noteBashStart(command: string, access: "read" | "write" | undefined, callId?: string): ProbeEvent | undefined {
+	/** bash 命令进入：判据 2 计数。写活动由 helper 侧的内核观察决定，不在这里猜。 */
+	noteBashStart(command: string, callId?: string): ProbeEvent | undefined {
 		if (this.#stopped) return undefined;
-		if (access === "write") this.noteWriteActivity();
 		const key = command.trim();
 		if (!key) return undefined;
 		this.#pending.set(callId ?? "", key);

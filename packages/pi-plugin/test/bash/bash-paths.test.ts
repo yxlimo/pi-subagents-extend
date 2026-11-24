@@ -4,7 +4,7 @@
 // checked without a live pi session.
 //
 // The path candidates a bash command yields, and the working-tree check that
-// refuses a read-class command pointing outside the tree.
+// refuses a command pointing outside the tree.
 //   node test/bash-paths.test.ts
 
 import assert from "node:assert/strict"
@@ -92,13 +92,13 @@ function pathCandidates(command: string): string[] {
   })
   const outside = "/home/other-notes"
   const denied = await h.call("bash", { command: `rg foo ${outside}` })
-  assert.equal(denied?.block, true, "a read-class command pointing outside the tree is refused")
+  assert.equal(denied?.block, true, "the command pointing outside the tree is refused")
   assert.match(denied.reason, /is outside the working tree/, "the refusal names the working tree")
   assert.doesNotMatch(denied.reason, /read scope/, "the refusal no longer talks about the read scope")
   assert.match(denied.reason, /path nudge, not a wall/, "the refusal says it is a nudge, not a wall")
   assert.ok(denied.reason.includes(outside), `the refusal names the path verbatim, got: ${denied.reason}`)
   h.restore()
-  console.log("  ok   read-class bash outside the tree is refused with a nudge message")
+  console.log("  ok   bash outside the tree is refused with a nudge message")
 }
 
 // 109. 树内路径照旧放行：这条是正控，防止「一律拒绝」也能过上一条。
@@ -114,7 +114,7 @@ function pathCandidates(command: string): string[] {
   assert.equal(await h.call("bash", { command: "rg foo src/auth/notes.txt" }), undefined, "a relative in-tree path passes")
   assert.equal(await h.call("bash", { command: `rg foo ${inside}` }), undefined, "an absolute in-tree path passes")
   h.restore()
-  console.log("  ok   read-class bash inside the tree still passes")
+  console.log("  ok   bash inside the tree still passes")
 }
 
 // 110. 工具链目录不再是豁免集：`/nix/store` 作为参数指向树外，要拒。
@@ -138,7 +138,7 @@ function pathCandidates(command: string): string[] {
 {
   const h = await handler({
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["node"], writable: true } },
+      "pi-subagents-extend/1": { scope: ["src/**"], writeScope: ["src/**"], bash: { allow: ["node"] } },
     }),
     cwd: workdir,
   })
@@ -151,20 +151,6 @@ function pathCandidates(command: string): string[] {
   console.log("  ok   quoted code fragments do not trigger the working-tree path check")
 }
 
-// 112. 写类命令不受这条检查影响：写类命令撞的是写范围，这条检查管的是工作树。
-{
-  const h = await handler({
-    bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["pnpm test"], writable: true } },
-    }),
-    cwd: workdir,
-  })
-  const input = { command: "pnpm test /home/other-notes" }
-  assert.equal(await h.call("bash", input), undefined, "a write-class command keeps working")
-  assert.ok(input.command.includes("pnpm test /home/other-notes"), "the command payload is preserved")
-  h.restore()
-  console.log("  ok   write-class bash is not subject to the working-tree path check")
-}
 
 // 113. 裸相对路径带斜杠、解析后落在树外：必须拒。
 //      斜杠是「路径」与「裸词/包名」在文本上唯一稳定的分界，所以 `escape-link/x` 这种
@@ -233,7 +219,7 @@ function pathCandidates(command: string): string[] {
     cwd: workdir,
   })
   const denied = await h.call("bash", { command: "rg -a -o 'x' /nix/store/anything" })
-  assert.equal(denied?.block, true, "a read-class command pointing into the toolchain store is refused")
+  assert.equal(denied?.block, true, "the command pointing into the toolchain store is refused")
   assert.match(denied.reason, /is outside the working tree/, "the refusal names the working tree")
   assert.doesNotMatch(denied.reason, /read scope/, "the refusal no longer talks about the read scope")
   assert.ok(denied.reason.includes("/nix/store/anything"), `the refusal names the offending argument, got: ${denied.reason}`)
@@ -278,7 +264,7 @@ function pathCandidates(command: string): string[] {
   assert.equal(
     await h.call("bash", { command: "rg foo docs/x.md" }),
     undefined,
-    "a read-class command may name an in-tree path outside the scope",
+    "a command may name an in-tree path outside the scope",
   )
   h.restore()
   console.log("  ok   判据是工作树：树内但范围外的路径对 bash 放行")
