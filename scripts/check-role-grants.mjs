@@ -162,6 +162,24 @@ const exists = (path) => {
 	}
 };
 
+/**
+ * This package's own `src/`, so a loader path installed on somebody's machine can still be judged by
+ * the file list we ship: `<prefix>/pi-subagents-extend/src/index.ts` has to name a file here.
+ */
+const ownSrc = resolve(dirname(fileURLToPath(import.meta.url)), "..", "packages", "pi-plugin", "src");
+
+/**
+ * The `src/<rest>` tail of a loader path that points into this package, or undefined when the path
+ * belongs to some other extension — a foreign loader must not be judged against our file list.
+ */
+export function shippedLoaderTail(entry) {
+	if (!entry.includes("pi-subagents-extend")) return undefined;
+	const marker = "/src/";
+	const at = entry.lastIndexOf(marker);
+	if (at < 0) return undefined;
+	return entry.slice(at + marker.length);
+}
+
 /** Parse the mise task names/aliases so a gate can be checked against a real task. */
 export function knownMiseTasks(toml) {
 	const names = [...toml.matchAll(/^\[tasks\.(?:"([^"]+)"|([A-Za-z0-9:_-]+))\]/gm)].map(
@@ -199,9 +217,31 @@ export function checkRoleDirs(dir, { miseToml, root = resolve(dir, "..", "..") }
 		// absolute path is not portable and cannot be verified in a fresh checkout. Verify what the machine
 		// running the check can verify: anything inside this repo must exist, anything outside is checked
 		// only when its directory exists here — otherwise the CI answer would be "every path is missing".
+		//
+		// The installed shape is verifiable on any machine: whatever the prefix is, the tail after `/src/`
+		// has to name a file this package ships. That catches a rename or a typo in CI, which the existence
+		// check cannot do for a path that only exists on somebody's machine.
 		for (const entry of loaderEntries(text)) {
 			const resolved = isAbsolute(entry) ? entry : resolve(root, entry);
 			const inside = resolved === root || resolved.startsWith(root + sep);
+			// A path that names this package has to reach a file it ships: `src/` is what the tarball
+			// carries, so anything else (a deleted `.pi/agent-profiles/…` loader, a `dist/` guess) loads
+			// nothing at all whoever runs it.
+			if (entry.includes("pi-subagents-extend")) {
+				const tail = shippedLoaderTail(entry);
+				if (tail === undefined) {
+					problems.push(
+						`${path}: subagentOnlyExtensions names ${entry}, which is not inside this package's shipped src/ — the role would load nothing`,
+					);
+					continue;
+				}
+				if (!exists(join(ownSrc, tail))) {
+					problems.push(
+						`${path}: subagentOnlyExtensions names ${entry}, but src/${tail} is not a file this package ships — the role would load nothing`,
+					);
+					continue;
+				}
+			}
 			if (!inside && !exists(dirname(resolved))) {
 				unverifiable.push(`${path}: ${entry}`);
 				continue;

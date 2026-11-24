@@ -139,6 +139,59 @@ test("loader 文件存在时不报错", () => {
 	}
 });
 
+test("装好的 loader 指向本包不存在的 src 文件 → 报错（本机有没有那份安装都要报）", () => {
+	// 机器绝对路径在 CI 上判不了存在性，但「尾部是 src/<file> 而本包没有这个文件」任何机器都能判：
+	// 改名或手误就靠这条抓住。
+	const dir = withRoleDirs({
+		"coder.md": md({ loader: "/opt/nowhere/node_modules/pi-subagents-extend/src/gone.ts" }),
+	});
+	try {
+		const { problems } = checkRoleDirs(dir);
+		assert.equal(problems.length, 1);
+		assert.match(problems[0], /src\/gone\.ts is not a file this package ships/);
+
+test("指向本包但不在 src/ 下的 loader → 报错（回归：删掉 .pi/agent-profiles/md-role.ts 后仍被四个角色 md 引用）", () => {
+	const dir = withRoleDirs({
+		"coder.md": md({
+			loader: "/home/x/extensions/pi-subagents-extend/.pi/agent-profiles/md-role.ts",
+		}),
+	});
+	try {
+		const { problems } = checkRoleDirs(dir);
+		assert.equal(problems.length, 1);
+		assert.match(problems[0], /not inside this package's shipped src\//);
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+});
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+});
+
+test("装好的 loader 指向本包真的发布的文件 → 不算错，但存在性仍记为不可验证", () => {
+	const dir = withRoleDirs({
+		"coder.md": md({ loader: "/opt/nowhere/node_modules/pi-subagents-extend/src/index.ts" }),
+	});
+	try {
+		const { problems, unverifiable } = checkRoleDirs(dir);
+		assert.deepEqual(problems, []);
+		// 悄悄当作通过是不行的：这一条这一台机器确实没验证。
+		assert.equal(unverifiable.length, 1);
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+});
+
+test("别的扩展的 loader 不拿本包的文件表去判", () => {
+	const dir = withRoleDirs({ "coder.md": md({ loader: "/opt/other-ext/src/thing.ts" }) });
+	try {
+		assert.deepEqual(checkRoleDirs(dir).problems, []);
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+});
+
 // ---- 写授权 --------------------------------------------------------------------
 test("preExec 用 mkdir -p 创建的目标算可达，别的一律算死授权", () => {
 	const dir = withRoleDirs({
