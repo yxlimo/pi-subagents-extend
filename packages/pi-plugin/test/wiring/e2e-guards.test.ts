@@ -345,7 +345,7 @@ async function runDispatch(fixture: string, project: string): Promise<DispatchOu
 		);
 		assert.match(
 			refused.text,
-			/use contact_supervisor to ask for writablePaths\./,
+			/use contact_supervisor to ask for writablePaths or a wider write scope\./,
 			`the annotation must say what to do. got: ${JSON.stringify(refused.text.slice(0, 400))} stderr: ${tail(run.stderr)}`,
 		);
 		assert.equal(
