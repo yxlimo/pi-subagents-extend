@@ -123,7 +123,7 @@ function requiresNetworkOf(command: string): string | null {
 			"pi-subagents-extend/1": {
 				scope: ["."],
 				maxDenies: 0,
-				bash: { read: ["curl", "git fetch", "pnpm install", "git status", "rg"] },
+				bash: { allow: ["curl", "git fetch", "pnpm install", "git status", "rg"], writable: true },
 			},
 		}),
 	})
@@ -145,7 +145,7 @@ function requiresNetworkOf(command: string): string | null {
 	assert.equal(requiresNetworkOf("git fetch origin"), "git fetch", "the matcher names the subcommand")
 	const h = await handler({
 		bindings: JSON.stringify({
-			"pi-subagents-extend/1": { scope: ["."], maxDenies: 0, bash: { read: ["git fetch"] } },
+			"pi-subagents-extend/1": { scope: ["."], maxDenies: 0, bash: { allow: ["git fetch"], writable: true } },
 		}),
 	})
 	const denied = await h.call("bash", { command: "git fetch origin" })
@@ -160,7 +160,7 @@ function requiresNetworkOf(command: string): string | null {
 	const input = { command: "curl https://example.com" }
 	const h = await handler({
 		bindings: JSON.stringify({
-			"pi-subagents-extend/1": { scope: ["."], bash: { read: ["curl"], network: true } },
+			"pi-subagents-extend/1": { scope: ["."], bash: { allow: ["curl"], network: true } },
 		}),
 	})
 	assert.equal(await h.call("bash", input), undefined, "an online session still allows curl")
@@ -179,7 +179,7 @@ function requiresNetworkOf(command: string): string | null {
 		bindings: JSON.stringify({
 			"pi-subagents-extend/1": {
 				scope: ["."],
-				bash: { read: ["pnpm install", "npm ci", "cargo fetch", "npm run build", "pnpm --dir packages/pi-plugin run typecheck"] },
+				bash: { allow: ["pnpm install", "npm ci", "cargo fetch", "npm run build", "pnpm --dir packages/pi-plugin run typecheck"], writable: true },
 			},
 		}),
 	})
@@ -196,7 +196,7 @@ function requiresNetworkOf(command: string): string | null {
 	assert.equal(requiresNetworkOf("rg foo ."), null, "rg is local")
 	const h = await handler({
 		bindings: JSON.stringify({
-			"pi-subagents-extend/1": { scope: ["."], bash: { read: ["git status", "rg"] } },
+			"pi-subagents-extend/1": { scope: ["."], bash: { allow: ["git status", "rg"] } },
 		}),
 	})
 	assert.equal(await h.call("bash", { command: "git status" }), undefined, "git status still runs")
@@ -210,7 +210,7 @@ function requiresNetworkOf(command: string): string | null {
 	assert.equal(requiresNetworkOf("FOO=1 curl https://x"), "curl", "leading assignments are stripped")
 	const h = await handler({
 		bindings: JSON.stringify({
-			"pi-subagents-extend/1": { scope: ["."], maxDenies: 0, bash: { read: ["curl"] } },
+			"pi-subagents-extend/1": { scope: ["."], maxDenies: 0, bash: { allow: ["curl"] } },
 		}),
 	})
 	const denied = await h.call("bash", { command: "FOO=1 curl https://x" })
@@ -235,7 +235,7 @@ function requiresNetworkOf(command: string): string | null {
 			"pi-subagents-extend/1": {
 				scope: ["."],
 				maxDenies: 0,
-				bash: { read: ["git remote -v", "git submodule update", "git remote update"] },
+				bash: { allow: ["git remote -v", "git submodule update", "git remote update"], writable: true },
 			},
 		}),
 	})
@@ -258,7 +258,7 @@ function requiresNetworkOf(command: string): string | null {
 				scope: ["."],
 				maxDenies: 2,
 				maxWriteDenies: 2,
-				bash: { read: ["curl"] },
+				bash: { allow: ["curl"] },
 			},
 		}),
 	})
@@ -281,7 +281,7 @@ function requiresNetworkOf(command: string): string | null {
 				writeScope: ["src/**"],
 				maxDenies: 0,
 				maxWriteDenies: 2,
-				bash: { read: ["curl"] },
+				bash: { allow: ["curl"] },
 			},
 		}),
 	})
@@ -326,7 +326,7 @@ function requiresNetworkOf(command: string): string | null {
 			"pi-subagents-extend/1": {
 				scope: ["."],
 				maxDenies: 0,
-				bash: { read: ["git"] },
+				bash: { allow: ["git"], writable: true },
 			},
 		}),
 	})
@@ -373,7 +373,7 @@ function requiresNetworkOf(command: string): string | null {
 			"pi-subagents-extend/1": {
 				scope: ["."],
 				maxDenies: 0,
-				bash: { read: ["env", "git"] },
+				bash: { allow: ["env", "git"] },
 			},
 		}),
 	})
@@ -398,7 +398,7 @@ function requiresNetworkOf(command: string): string | null {
 			"pi-subagents-extend/1": {
 				scope: ["."],
 				maxDenies: 0,
-				bash: { read: ["curl"] },
+				bash: { allow: ["curl"] },
 			},
 		}),
 	})
@@ -422,7 +422,7 @@ function requiresNetworkOf(command: string): string | null {
 			"pi-subagents-extend/1": {
 				scope: ["."],
 				maxDenies: 0,
-				bash: { read: ["gh"] },
+				bash: { allow: ["gh"] },
 			},
 		}),
 	})
@@ -455,7 +455,7 @@ function requiresNetworkOf(command: string): string | null {
 			"pi-subagents-extend/1": {
 				scope: ["."],
 				maxDenies: 0,
-				bash: { read: ["curl"] },
+				bash: { allow: ["curl"] },
 			},
 		}),
 	})
@@ -485,7 +485,7 @@ function requiresNetworkOf(command: string): string | null {
 		bindings: JSON.stringify({
 			"pi-subagents-extend/1": {
 				scope: ["."],
-				bash: { read: ["git status"], env: { TMPDIR: root } },
+				bash: { allow: ["git status"], env: { TMPDIR: root } },
 			},
 		}),
 	})
@@ -517,7 +517,7 @@ function requiresNetworkOf(command: string): string | null {
 	const h = await handler({
 		cwd: plain,
 		bindings: JSON.stringify({
-			"pi-subagents-extend/1": { scope: ["."], bash: { read: ["git status"] } },
+			"pi-subagents-extend/1": { scope: ["."], bash: { allow: ["git status"] } },
 		}),
 	})
 	await h.call("bash", { command: "git status" })

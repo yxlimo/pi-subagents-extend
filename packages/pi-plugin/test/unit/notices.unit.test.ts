@@ -32,7 +32,7 @@ const cwd = process.cwd()
 // 2. 一条正则条目要说出来，单数 —— 这句话就是事故补丁的本体：字面条照列，
 //    但读者还得被告知「另有一条可能匹配任何东西的正则，这里不评估它」。
 {
-	const rule = parseBashRule({ read: ["git log", "re:^git push --force$"] })!
+	const rule = parseBashRule({ allow: ["git log", "re:^git push --force$"] })!
 	const hint = headEntriesHint(rule, "git push", cwd)
 	assert.match(hint, /git log/, "the literal same-program entry is still listed")
 	assert.match(hint, /plus 1 regex entry/, "the hint says a regex entry may also match")
@@ -42,7 +42,7 @@ const cwd = process.cwd()
 
 // 3. 计数照实：两条正则就是 2，复数形式。数错了读者又会低估还有多少条没看见。
 {
-	const rule = parseBashRule({ read: ["re:^git push --force$", "re:^git push --tags$"] })!
+	const rule = parseBashRule({ allow: ["re:^git push --force$", "re:^git push --tags$"] })!
 	const hint = headEntriesHint(rule, "git push", cwd)
 	assert.match(hint, /plus 2 regex entries/, "two regex entries are counted and pluralized")
 	console.log("  ok   two regex entries are counted in the plural")

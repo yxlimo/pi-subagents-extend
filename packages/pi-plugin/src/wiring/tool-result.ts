@@ -48,7 +48,7 @@ export function annotateToolResult(w: Wiring, event: ToolResultEvent): ToolResul
 	let readOnlyAllow = false;
 	if (isBash && ran && w.policy.bash) {
 		const bashMatch = classifyCommand(w.policy.bash, ran.command);
-		readOnlyAllow = bashMatch?.column === "allow" && bashMatch.access === "read" && isUnknownProgram(ran.command);
+		readOnlyAllow = bashMatch?.access === "read" && isUnknownProgram(ran.command);
 	}
 	const hints = [
 		handoffHintFor(text),

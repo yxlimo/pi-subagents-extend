@@ -216,7 +216,7 @@ if (described?.landlock?.supported) {
   )
 
   const offlineHandler = await handler({
-    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["**"], bash: { read: ["sh netprobe.sh"] } } }),
+    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["**"], bash: { allow: ["sh netprobe.sh"], writable: true } } }),
   })
   const input = { command: "sh netprobe.sh" }
   assert.equal(await offlineHandler.call("bash", input), undefined, "the probe is allowlisted")
@@ -257,7 +257,7 @@ if (described?.landlock?.supported) {
   // 开了网络的会话不补：那时网络失败确实是环境问题。
   const onlineHandler = await handler({
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["**"], bash: { read: ["sh netprobe.sh"], network: true } },
+      "pi-subagents-extend/1": { scope: ["**"], bash: { allow: ["sh netprobe.sh"], writable: true, network: true } },
     }),
   })
   assert.equal(
@@ -290,7 +290,7 @@ if (described?.landlock?.supported) {
   )
 
   const bindings = JSON.stringify({
-    "pi-subagents-extend/1": { scope: ["**"], bash: { write: ["sh write.sh"], writable: true } },
+    "pi-subagents-extend/1": { scope: ["**"], bash: { allow: ["sh write.sh"], writable: true } },
   })
 
   // 授权外：命令真的被内核拒掉。
@@ -349,7 +349,7 @@ if (described?.landlock?.supported) {
 {
   const h = await handler({
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["**"], writeScope: ["src"], bash: { write: ["git commit"], writable: true } },
+      "pi-subagents-extend/1": { scope: ["**"], writeScope: ["src"], bash: { allow: ["git commit"], writable: true } },
     }),
   })
   // 授权外的路径不能用 /tmp 下的：spec.write 天然包含 tmpdir()，那里会被判成「授权内」，
@@ -368,7 +368,7 @@ if (described?.landlock?.supported) {
 {
   const h = await handler({
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["**"], writeScope: ["src"], bash: { write: ["git commit"], writable: true } },
+      "pi-subagents-extend/1": { scope: ["**"], writeScope: ["src"], bash: { allow: ["git commit"], writable: true } },
     }),
   })
   const target = `/var/tmp/pi-extend-${process.pid}/hooks/pre-commit`
@@ -395,7 +395,7 @@ if (described?.landlock?.supported) {
 {
   const h = await handler({
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["**"], writeScope: ["src"], bash: { write: ["git diff", "cat"], writable: true } },
+      "pi-subagents-extend/1": { scope: ["**"], writeScope: ["src"], bash: { allow: ["git diff", "cat"], writable: true } },
     }),
   })
   const outside = `/var/tmp/pi-extend-${process.pid}/outside.txt`

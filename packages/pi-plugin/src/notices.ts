@@ -1,6 +1,6 @@
 /**
  * NOTICES 层：扩展说给人（父代理的 UI 告警）与模型（注解、提示）听的话里，关于授权本身的
- * 那一部分：不可达条目的原因与改法、legacy 配置的迁移提示、角色 md 未跟踪的告警。
+ * 那一部分：不可达条目的原因与改法、角色 md 未跟踪的告警。
  * 措辞只在这里写一份；index.ts 只做接线。UI 告警通道由调用方传入：模块级函数拿不到 `ctx`。
  * 模块拆分第五步：以下声明从 index.ts 原样搬出，行为不变。
  */
@@ -11,8 +11,6 @@ import { allEntries, classifyCommand, commandNeedsNoManifest, firstToken, leadin
 
 /** worktree 默认值依赖的角色 md：确认未被 git 跟踪的只提示一次（session_start 清空）。 */
 export const reportedUntrackedWorktreeProfiles = new Set<string>();
-/** 迁移告警：legacy bash.read / bash.write 只说一次（session_start 清空）。 */
-export const warnedLegacyBashColumns = new Set<string>();
 
 
 /** 沙箱注解的前缀：与 `sandbox-note.ts` 里的注解同一个标记。 */
@@ -191,18 +189,6 @@ function trackedInGit(cwd: string, relPath: string): boolean | undefined {
 	}
 }
 
-/** 还在用 legacy bash.read / bash.write 的配置提示一次：新写法是单列 bash.allow。 */
-export function warnLegacyBashColumns(config: Record<string, unknown> | undefined, source: string, warn: ((message: string) => void) | undefined): void {
-	if (!config || warnedLegacyBashColumns.has(source)) return;
-	const bash = config.bash;
-	if (!bash || typeof bash !== "object" || Array.isArray(bash)) return;
-	const legacy = ["read", "write"].filter((key) => Object.hasOwn(bash, key));
-	if (legacy.length === 0) return;
-	warnedLegacyBashColumns.add(source);
-	warn?.(
-		`pi-subagents-extend: ${source} still spells bash.${legacy.join(" and bash.")}, which are legacy columns; bash.allow is the single allowlist column now and read/write is judged internally. The legacy columns keep working until the compatibility layer is removed.`
-	);
-}
 
 /**
  * 补 worktree 默认值时，若默认值来自角色 md 而该文件没被 git 跟踪，告诉父代理一次：

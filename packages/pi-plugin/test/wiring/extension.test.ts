@@ -158,18 +158,18 @@ import { restoreState } from "../support.ts"
     bindings: JSON.stringify({
       "pi-subagents-extend/1": {
         scope: ["src/**"],
-        bash: { read: ["pnpm run typecheck"], write: ["pnpm test"] },
+        bash: { allow: ["git status", "cat src/a.ts"]},
       },
     }),
   })
-  const input = { command: "pnpm run typecheck" }
+  const input = { command: "git status" }
   assert.equal(await h.call("bash", input), undefined, "listed command passes")
   assert.match(
     input.command,
     /^'\/[^']*pi-subagents-extend-helper' '--spec' '\/[^']*spec-[0-9]+-[0-9]+-[^']*\.json' '--' 'bash' '-lc'/,
     "command is rewritten to run under the sandbox helper",
   )
-  assert.match(input.command, /'bash' '-lc' 'pnpm run typecheck'$/, "original command preserved as the payload")
+  assert.match(input.command, /'bash' '-lc' 'git status'$/, "original command preserved as the payload")
   const spec = specOf(input.command)
   assert.deepEqual(spec.read, ["/"], "everything stays readable")
   // The scratch dir plus the baseline devices are writable; nothing from the
@@ -220,7 +220,7 @@ import { restoreState } from "../support.ts"
     bindings: JSON.stringify({
       "pi-subagents-extend/1": {
         scope: ["src/**"],
-        bash: { write: ["node harness.mjs"], writable: true, network: true },
+        bash: { allow: ["node harness.mjs"], writable: true, network: true},
       },
     }),
   })
@@ -237,7 +237,7 @@ import { restoreState } from "../support.ts"
   const previous = process.env.PI_SUBAGENTS_EXTEND_HELPER_PATH
   process.env.PI_SUBAGENTS_EXTEND_HELPER_PATH = "/nonexistent/pi-subagents-extend-helper"
   const h2 = await handler({
-    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["src/**"], bash: { write: ["node harness.mjs"] } } }),
+    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["node harness.mjs"], writable: true} } }),
   })
   const missing = await h2.call("bash", { command: "node harness.mjs" })
   assert.equal(missing?.block, true, "no helper means no bash, even for a listed command")
@@ -256,7 +256,7 @@ import { restoreState } from "../support.ts"
     bindings: JSON.stringify({
       "pi-subagents-extend/1": {
         scope: ["src/**"],
-        bash: { read: ["pnpm run typecheck", "re: ^tsc --noEmit$"], write: ["re: ^pnpm -r (test|build)"] },
+        bash: { allow: ["pnpm run typecheck", "re: ^tsc --noEmit$", "re: ^pnpm -r (test|build)"], writable: true},
       },
     }),
   })
@@ -414,11 +414,11 @@ import { restoreState } from "../support.ts"
 
   const h = await handler({
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["src/**"], bash: { read: ["pnpm run typecheck"] } },
+      "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["git status"]} },
     }),
   })
   const commands: Outcome[] = []
-  for (let i = 0; i < 4; i += 1) commands.push(await h.call("bash", { command: "pnpm run typecheck" }))
+  for (let i = 0; i < 4; i += 1) commands.push(await h.call("bash", { command: "git status" }))
   assert.ok(commands.slice(0, 2).every((r) => r === undefined), "the first two repeats run")
   const warned = commands[2]
   assert.ok(warned, "the 3rd identical command is refused")
@@ -443,7 +443,7 @@ import { restoreState } from "../support.ts"
       "pi-subagents-extend/1": {
         scope: ["src/**", "lib/**"],
         writeScope: ["src/**"],
-        bash: { write: ["pnpm install"], writable: true },
+        bash: { allow: ["pnpm install"], writable: true},
       },
     }),
   })

@@ -308,7 +308,7 @@ async function runDispatch(fixture: string, project: string): Promise<DispatchOu
 			project,
 			bindings: {
 				"pi-subagents-extend/1": {
-					permissions: { scope: ["src/**"], bash: { write: ["touch"], read: ["echo"], writable: true } },
+					permissions: { scope: ["src/**"], bash: { allow: ["echo", "touch"], writable: true } },
 				},
 			},
 			steps: [

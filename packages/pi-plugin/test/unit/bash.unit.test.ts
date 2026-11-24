@@ -271,30 +271,26 @@ import {
 	console.log("  ok   a quoted git global value does not hide the verb")
 }
 
-// 29. 三列各自独立，开关按字面值读。
+// 29. allow 单列与开关各自按字面值读。
 {
 	const rule = parseBashRule({
-		read: ["cat f"],
-		write: ["rm f"],
 		allow: ["git status"],
 		network: true,
 		writable: true,
 		deny: ["rm -rf /"],
 	})
 	assert.ok(rule, "a rule with entries parses")
-	assert.deepEqual(rule.read, ["cat f"], "read is read as read")
-	assert.deepEqual(rule.write, ["rm f"], "write is read as write")
 	assert.deepEqual(rule.allow, ["git status"], "allow is its own column")
 	assert.deepEqual(rule.deny, ["rm -rf /"], "deny is read as deny")
 	assert.equal(rule.network, true, "network is read as network")
 	assert.equal(rule.writable, true, "writable is read as writable")
-	console.log("  ok   parseBashRule reads the three columns and the switches")
+	console.log("  ok   parseBashRule reads the allow column and the switches")
 }
 
 // 30. 三列都没有条目就是没有 bash：开关自己不算授权。
 {
 	assert.equal(parseBashRule({}), undefined, "no column means no bash")
-	assert.equal(parseBashRule({ read: [] }), undefined, "an explicitly empty column means no bash")
+	assert.equal(parseBashRule({ allow: [] }), undefined, "an explicitly empty allowlist means no bash")
 	assert.equal(parseBashRule({ network: true }), undefined, "a switch alone is not an allowlist")
 	assert.equal(parseBashRule("nonsense"), undefined, "a non-object is not a rule")
 	console.log("  ok   parseBashRule returns undefined when no column carries an entry")
@@ -323,11 +319,11 @@ import {
 
 // 36. classifyCommand 说出命中的是哪一条：条目原文与列名都给出。
 {
-	const rule = parseBashRule({ read: ["cat f"], write: ["rm f"], allow: ["git status"], writable: true })
+	const rule = parseBashRule({ allow: ["git status"], writable: true })
 	assert.ok(rule, "the rule parses")
 	assert.deepEqual(
 		classifyCommand(rule, "git status --short"),
-		{ access: "read", column: "allow", entry: "git status" },
+		{ access: "read", entry: "git status" },
 		"the matching entry is named",
 	)
 	console.log("  ok   classifyCommand names the entry that matched")
@@ -339,33 +335,17 @@ import {
 	assert.ok(rule, "the rule parses")
 	assert.deepEqual(
 		classifyCommand(rule, "rm f"),
-		{ access: "write", column: "allow", entry: "rm f" },
+		{ access: "write", entry: "rm f" },
 		"an allow entry whose command writes is a write",
 	)
 	assert.deepEqual(
 		classifyCommand(rule, "cat f"),
-		{ access: "read", column: "allow", entry: "cat f" },
+		{ access: "read", entry: "cat f" },
 		"an allow entry whose command reads is a read",
 	)
 	console.log("  ok   the allow column takes its access from the command")
 }
 
-// 38. 兼容列仍按原义判，并且排在 allow 列前面：同一条命令只有一个答案。
-{
-	const rule = parseBashRule({ write: ["rm f"], read: ["cat f"], allow: ["rm f"], writable: true })
-	assert.ok(rule, "the rule parses")
-	assert.deepEqual(
-		classifyCommand(rule, "rm f"),
-		{ access: "write", column: "write", entry: "rm f" },
-		"the legacy write column keeps its meaning",
-	)
-	assert.deepEqual(
-		classifyCommand(rule, "cat f"),
-		{ access: "read", column: "read", entry: "cat f" },
-		"the legacy read column keeps its meaning",
-	)
-	console.log("  ok   the legacy columns keep their own meaning")
-}
 
 // 39. allow 不能取消 deny：两条都命中时，deny 仍然先说。
 {
@@ -373,9 +353,9 @@ import {
 	assert.ok(rule, "the rule parses")
 	assert.equal(deniedEntry(rule, "git push origin main"), "git push", "the deny entry is named")
 	assert.equal(
-		classifyCommand(rule, "git push origin main")?.column,
-		"allow",
-		"the allow column still matches it: the deny is not cancelled, it is checked first",
+		classifyCommand(rule, "git push origin main")?.entry,
+		"git push",
+		"the allow entry still matches it: the deny is not cancelled, it is checked first",
 	)
 	console.log("  ok   an allow entry does not cancel a deny")
 }

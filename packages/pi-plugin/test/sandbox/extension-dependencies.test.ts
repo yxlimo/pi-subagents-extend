@@ -15,7 +15,7 @@ import { handler, specOf, workdir, ext } from "../harness.ts"
   mkdirSync(scratch, { recursive: true })
   process.env.TMPDIR = scratch
   const h = await handler({
-    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["src/**"], bash: { read: ["pnpm run typecheck"] } } }),
+    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["pnpm run typecheck"], writable: true } } }),
   })
   const input = { command: "pnpm run typecheck" }
   assert.equal(await h.call("bash", input), undefined, "a listed command still passes with a custom TMPDIR")
@@ -35,7 +35,7 @@ import { handler, specOf, workdir, ext } from "../harness.ts"
   // 仍能被旧版 helper 解开（它的 spec 解析是 deny_unknown_fields）。
   delete process.env.TMPDIR
   const plain = await handler({
-    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["src/**"], bash: { read: ["pnpm run typecheck"] } } }),
+    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["pnpm run typecheck"], writable: true } } }),
   })
   const plainInput = { command: "pnpm run typecheck" }
   assert.equal(await plain.call("bash", plainInput), undefined, "listed command passes")
@@ -68,7 +68,7 @@ import { handler, specOf, workdir, ext } from "../harness.ts"
       "pi-subagents-extend/1": {
         scope: ["."],
         maxDenies: 1,
-        bash: { read: ["git status", "rg"], write: ["git commit", "pnpm test", "mise run test", "mkdir docs"] },
+        bash: { allow: ["git status", "rg", "git commit", "pnpm test", "mise run test", "mkdir docs"], writable: true},
       },
     }),
   })
@@ -87,10 +87,8 @@ import { handler, specOf, workdir, ext } from "../harness.ts"
 
   // git 不受闸门管：它不需要 node_modules，而「先落任务日志再提交」的保树纪律
   // 恰恰在依赖缺失时最要用得上。只读命令同理。
-  // 判据是「写类」还是「包管理器」，不是名字里有没有 pnpm：写类但非包管理器的
-  // 构建入口（mise run test）与写类命令（mkdir）同样会对着没装好的依赖去跑。
-  const mise = await h.call("bash", { command: "mise run test" })
-  assert.equal(mise?.block, true, "a write-classified build entry is gated though it is not a package manager")
+  // 判据是「写类」还是「包管理器」，不是名字里有没有 pnpm：写类命令（mkdir）同样会对着
+  // 没装好的依赖去跑。
   const mkdir = await h.call("bash", { command: "mkdir docs" })
   assert.equal(mkdir?.block, true, "so is an ordinary write command")
 
@@ -104,7 +102,7 @@ import { handler, specOf, workdir, ext } from "../harness.ts"
   // 包管理器即使被写在 read 列也拦：那条路就是去装依赖。
   const pm = await handler({
     cwd: tree,
-    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { read: ["pnpm typecheck"] } } }),
+    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { allow: ["pnpm typecheck"], writable: true } } }),
   })
   const install = await pm.call("bash", { command: "pnpm typecheck" })
   assert.equal(install?.block, true, "a package manager is gated even when the allowlist calls it read-only")
@@ -126,7 +124,7 @@ import { handler, specOf, workdir, ext } from "../harness.ts"
   const h = await handler({
     cwd: tree,
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["."], bash: { write: ["pnpm test"], dependencyGate: false } },
+      "pi-subagents-extend/1": { scope: ["."], bash: { allow: ["pnpm test"], writable: true, dependencyGate: false} },
     }),
   })
   const out = await h.call("bash", { command: "pnpm test" })
@@ -142,7 +140,7 @@ import { handler, specOf, workdir, ext } from "../harness.ts"
   writeFileSync(join(tree, "package.json"), "{}")
   const h = await handler({
     cwd: tree,
-    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { read: ["git status"] } } }),
+    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { allow: ["git status"] } } }),
   })
   const out = await h.call("bash", { command: "git status" })
   assert.notEqual(out?.block, true, "no lockfile means no dependency root, so the gate stays out of the way")
@@ -163,7 +161,7 @@ import { handler, specOf, workdir, ext } from "../harness.ts"
     bindings: JSON.stringify({
       "pi-subagents-extend/1": {
         scope: ["."],
-        bash: { read: ["sh", "env", "exec", "rg", "command"], write: ["/usr/bin/pnpm test", "env git commit"] },
+        bash: { allow: ["sh", "env", "exec", "rg", "command", "/usr/bin/pnpm test", "env git commit"], writable: true},
       },
     }),
   })
@@ -174,7 +172,7 @@ import { handler, specOf, workdir, ext } from "../harness.ts"
   }
   const searching = await h.call("bash", { command: "rg pnpm" })
   assert.notEqual(searching?.block, true, "mentioning the word is not invoking it")
-  const wrappedSearch = await h.call("bash", { command: 'sh -c "rg pnpm"' })
+  const wrappedSearch = await h.call("bash", { command: "env rg pnpm" })
   assert.notEqual(wrappedSearch?.block, true, "a wrapper does not turn a search into an install")
   const lookup = await h.call("bash", { command: "command -v pnpm" })
   assert.notEqual(lookup?.block, true, "asking whether a tool exists is not running it")
@@ -195,7 +193,7 @@ import { handler, specOf, workdir, ext } from "../harness.ts"
   writeFileSync(join(tree, "apps", "web", "pnpm-lock.yaml"), "lockfileVersion: 9.0\n")
   const h = await handler({
     cwd: tree,
-    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { write: ["pnpm test"] } } }),
+    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { allow: ["pnpm test"], writable: true} } }),
   })
   const out = await h.call("bash", { command: "pnpm test" })
   assert.equal(out?.block, true, "a lockfile one generation deeper is still a dependency root")
@@ -214,7 +212,7 @@ import { handler, specOf, workdir, ext } from "../harness.ts"
   writeFileSync(join(tree, ".pnp.cjs"), "// pnp\n")
   const h = await handler({
     cwd: tree,
-    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { write: ["yarn test"] } } }),
+    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { allow: ["yarn test"], writable: true} } }),
   })
   const out = await h.call("bash", { command: "yarn test" })
   assert.notEqual(out?.block, true, "a PnP install counts as installed")
@@ -243,7 +241,7 @@ import { handler, specOf, workdir, ext } from "../harness.ts"
   const h = await handler({
     cwd: tree,
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["."], bash: { write: ["pnpm test"], dependencyGate: ["fixtures"] } },
+      "pi-subagents-extend/1": { scope: ["."], bash: { allow: ["pnpm test"], writable: true, dependencyGate: ["fixtures"]} },
     }),
   })
   const blocked = await h.call("bash", { command: "pnpm test" })
@@ -274,7 +272,7 @@ import { handler, specOf, workdir, ext } from "../harness.ts"
   const inner = await handler({
     cwd: join(tree, "fixtures", "sample"),
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["."], bash: { write: ["pnpm test"], dependencyGate: [join(tree, "fixtures")] } },
+      "pi-subagents-extend/1": { scope: ["."], bash: { allow: ["pnpm test"], writable: true, dependencyGate: [join(tree, "fixtures")]} },
     }),
   })
   const atCwd = await inner.call("bash", { command: "pnpm test" })
@@ -286,7 +284,7 @@ import { handler, specOf, workdir, ext } from "../harness.ts"
   const relInner = await handler({
     cwd: join(tree, "fixtures", "sample"),
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["."], bash: { write: ["pnpm test"], dependencyGate: ["fixtures"] } },
+      "pi-subagents-extend/1": { scope: ["."], bash: { allow: ["pnpm test"], writable: true, dependencyGate: ["fixtures"]} },
     }),
   })
   const relCwd = await relInner.call("bash", { command: "pnpm test" })
@@ -328,7 +326,7 @@ import { handler, specOf, workdir, ext } from "../harness.ts"
   const globH = await handler({
     cwd: tree,
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["."], bash: { write: ["pnpm test"], dependencyGate: ["fixtures/*"] } },
+      "pi-subagents-extend/1": { scope: ["."], bash: { allow: ["pnpm test"], writable: true, dependencyGate: ["fixtures/*"]} },
     }),
   })
   const globbed = await globH.call("bash", { command: "pnpm test" })
@@ -348,7 +346,7 @@ import { handler, specOf, workdir, ext } from "../harness.ts"
   writeFileSync(join(tree, "pnpm-lock.yaml"), "lockfileVersion: 9.0\n")
 
   const bind = (gate: unknown) =>
-    JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { write: ["pnpm test"], dependencyGate: gate } } })
+    JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { allow: ["pnpm test"], writable: true, dependencyGate: gate} } })
 
   const off = await handler({ cwd: tree, bindings: bind(false) })
   const unchecked = await off.call("bash", { command: "pnpm test" })

@@ -44,7 +44,7 @@ const rc = (await import(join(repo, "src", "role-config.ts"))) as unknown as typ
   const bindings = JSON.stringify({
     "pi-subagents-extend/1": {
       scope: ["."],
-      bash: { read: ["git status"], writable: true },
+      bash: { allow: ["git status"], writable: true},
     },
   })
   const run = await childRun({
@@ -140,7 +140,7 @@ const rc = (await import(join(repo, "src", "role-config.ts"))) as unknown as typ
   const bindings = JSON.stringify({
     "pi-subagents-extend/1": {
       scope: ["."],
-      bash: { read: ["git status"] },
+      bash: { allow: ["git status"]},
     },
   })
   const countA = join(projA, "count.txt")
@@ -301,27 +301,8 @@ const rc = (await import(join(repo, "src", "role-config.ts"))) as unknown as typ
   console.log("  ok   /permission prints the binding namespace and version")
 }
 
-// 259. /permission shows one bash allow column in enforcement order, plus a legacy line.
-{
-  const h = await handler({
-    bindings: JSON.stringify({
-      "pi-subagents-extend/1": {
-        scope: ["src/**"],
-        bash: { read: ["cat r"], write: ["cat w"], allow: ["cat a"] },
-      },
-    }),
-  })
-  const notified: string[] = []
-  await h.commands["permission"].handler("", { cwd: workdir, ui: { notify: (m: string) => notified.push(m) } })
-  const text = notified.join("\n")
-  assert.match(text, /^bash allow \(no write access: commands that write are refused\): cat a$/m, "the allow line carries the allow column only, not the legacy columns")
-  assert.match(text, /bash \(legacy columns, migrate to allow\): read cat r \| write cat w/, "the legacy line names read and write")
-  assert.doesNotMatch(text, /bash read: |bash write: /, "the retired two-column display is gone")
-  h.restore()
-  console.log("  ok   /permission shows one bash allow column plus the legacy line")
-}
 
-// 260. The legacy line is absent when only the allow column is populated.
+// 260. /permission prints the allow column with its entries.
 {
   const h = await handler({
     bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["ls a"] } } }),
@@ -330,9 +311,9 @@ const rc = (await import(join(repo, "src", "role-config.ts"))) as unknown as typ
   await h.commands["permission"].handler("", { cwd: workdir, ui: { notify: (m: string) => notified.push(m) } })
   const text = notified.join("\n")
   assert.match(text, /bash allow \(no write access: commands that write are refused\): ls a/, "the allow column shows the allow entry")
-  assert.doesNotMatch(text, /legacy columns, migrate to allow/, "an allow-only config gets no legacy line")
+
   h.restore()
-  console.log("  ok   /permission prints the legacy line only when a legacy column is set")
+  console.log("  ok   /permission prints the allow column with its entries")
 }
 
 

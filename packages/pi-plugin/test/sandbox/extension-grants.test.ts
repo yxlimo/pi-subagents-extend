@@ -28,7 +28,7 @@ import { restoreState } from "../support.ts"
       "pi-subagents-extend/1": {
         scope: ["src/**"],
         bash: {
-          write: ["pnpm install"],
+          allow: ["pnpm install"],
           writable: true,
           writablePaths: [store],
           env: { FOO: "bar" },
@@ -69,7 +69,7 @@ import { restoreState } from "../support.ts"
     bindings: JSON.stringify({
       "pi-subagents-extend/1": {
         scope: ["src/**"],
-        bash: { read: ["pnpm run typecheck"], writable: true, writablePaths: ["/tmp"] },
+        bash: { allow: ["pnpm run typecheck"], writable: true, writablePaths: ["/tmp"] },
       },
     }),
   })
@@ -87,7 +87,7 @@ import { restoreState } from "../support.ts"
   const h = await handler({
     cwd: workdir,
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["src/**"], bash: { read: ["pnpm run typecheck"] }, maxDenies: 0 },
+      "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["pnpm run typecheck"], writable: true }, maxDenies: 0 },
     }),
   })
   const denied = await h.call("bash", { command: "pnpm install" })
@@ -106,7 +106,7 @@ import { restoreState } from "../support.ts"
     bindings: JSON.stringify({
       "pi-subagents-extend/1": {
         scope: ["src/**"],
-        bash: { write: ["pnpm install"], writable: true },
+        bash: { allow: ["pnpm install"], writable: true},
       },
     }),
   })
@@ -144,7 +144,7 @@ import { restoreState } from "../support.ts"
   const previous = process.env.PI_SUBAGENTS_EXTEND_HELPER_PATH
   process.env.PI_SUBAGENTS_EXTEND_HELPER_PATH = fake
   const h = await handler({
-    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["src/**"], bash: { write: ["pnpm test"] } } }),
+    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["pnpm test"], writable: true} } }),
   })
   const denied = await h.call("bash", { command: "pnpm test" })
   assert.equal(denied?.block, true, "an unsupported kernel denies bash")
@@ -298,7 +298,7 @@ async function mdChild({ cwd, prompt, bindings }: { cwd: string; prompt: string;
 
     const bindings = (writable: boolean): string =>
       JSON.stringify({
-        "pi-subagents-extend/1": { scope: ["**"], bash: { [writable ? "write" : "read"]: ["git status"], writable } },
+        "pi-subagents-extend/1": { scope: ["**"], bash: { allow: ["git status"], writable } },
       })
 
     const h = await handler({ cwd: wtDir, bindings: bindings(true) })
@@ -333,7 +333,7 @@ async function mdChild({ cwd, prompt, bindings }: { cwd: string; prompt: string;
     const live = await handler({
       cwd: wtDir,
       bindings: JSON.stringify({
-        "pi-subagents-extend/1": { scope: ["**"], bash: { write: ["git add b.txt"], writable: true } },
+        "pi-subagents-extend/1": { scope: ["**"], bash: { allow: ["git add b.txt"], writable: true} },
       }),
     })
     const liveInput = { command: "git add b.txt" }

@@ -1,6 +1,5 @@
 import type { ExtensionContext, SessionStartEvent } from "@earendil-works/pi-coding-agent";
-import { reportUnreachableEntries, reportedUntrackedWorktreeProfiles, warnLegacyBashColumns, warnedLegacyBashColumns } from "../notices.ts";
-import { bindingKey } from "../role-config.ts";
+import { reportUnreachableEntries, reportedUntrackedWorktreeProfiles } from "../notices.ts";
 import { bashBlocker, detectPnpmStore, helperPath, reportedHiddenGrants } from "../sandbox/index.ts";
 import type { ActivateOptions, Wiring } from "./context.ts";
 
@@ -22,7 +21,6 @@ export async function wireSessionStart(w: Wiring, _options: ActivateOptions, _ev
 	// 本该发出的告警吞掉（那是「lost, not duplicated」的一种，且完全没有痕迹）。
 	reportedHiddenGrants.clear();
 	reportedUntrackedWorktreeProfiles.clear();
-	warnedLegacyBashColumns.clear();
 	// UI 提示通道在这里接上会话的 ctx：`judgeToolCall` 只在工具调用时绑定，session_start
 	// 里的告警要发得出去，就不能等第一次工具调用。
 	w.uiWarning = (message) => {
@@ -30,20 +28,13 @@ export async function wireSessionStart(w: Wiring, _options: ActivateOptions, _ev
 		ui?.notify?.(message, "warning");
 	};
 	const cwd = ctx.cwd ?? process.cwd();
-	warnLegacyBashColumns(w.call.config, `extensionBindings ${bindingKey()}`, w.uiWarning);
 	if (!w.policy.active) return;
 	const budget = w.policy.maxReads > 0 ? `, read budget ${w.policy.maxReads}` : "";
 	const bash = w.policy.bash
-		/**
-		 * 报「配置里到底有什么」，不是「哪一列有值」：Phase 2 之后合法配置只用 `allow`，
-		 * 而这一行曾经只数 legacy 的 read/write，于是只用 allow 的角色在启动摘要里显示成
-		 * `bash 0 read / 0 write` —— 白名单满的，摘要却说空。legacy 列只在真的配了才提。
-		 */
+		/** 报「配置里到底有什么」，不是「哪一列有值」：只数 allow。 */
 		? (() => {
 			const parts: string[] = [];
 			if (w.policy.bash.allow.length > 0) parts.push(`${w.policy.bash.allow.length} allowed`);
-			if (w.policy.bash.read.length > 0) parts.push(`${w.policy.bash.read.length} read`);
-			if (w.policy.bash.write.length > 0) parts.push(`${w.policy.bash.write.length} write`);
 			return `, bash ${parts.join(" / ") || "no entries"}`;
 		})()
 		: ", bash off";

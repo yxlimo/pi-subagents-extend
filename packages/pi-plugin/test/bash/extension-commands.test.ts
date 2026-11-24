@@ -18,7 +18,7 @@ import { handler, specOf, specPathOf, workdir, stateDir, ext } from "../harness.
 
   const missing = await handler({
     cwd: workdir,
-    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { read: ["ls"] } } }),
+    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { allow: ["ls"] } } }),
   })
   const said = missing.ui.join("\n")
   assert.match(said, /no sandbox helper found/, "a missing helper is announced when the session starts")
@@ -67,7 +67,7 @@ import { handler, specOf, specPathOf, workdir, stateDir, ext } from "../harness.
 {
   const h = await handler({
     cwd: workdir,
-    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { read: ["ls"] } } }),
+    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { allow: ["ls"] } } }),
   })
   const refused = await h.call("bash", { command: "pwd" })
   assert.equal(refused?.block, true, "a command outside the list is refused")
@@ -89,7 +89,7 @@ import { handler, specOf, specPathOf, workdir, stateDir, ext } from "../harness.
   const h = await handler({
     cwd: workdir,
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["."], bash: { read: ["ls", "git status"], writable: true } },
+      "pi-subagents-extend/1": { scope: ["."], bash: { allow: ["ls", "git status"], writable: true } },
     }),
   })
   const first = { command: "ls" }
@@ -126,7 +126,7 @@ import { handler, specOf, specPathOf, workdir, stateDir, ext } from "../harness.
   //     两个方向都断言，否则实现改成「删」或「不删」都能过。
   const h = await handler({
     cwd: workdir,
-    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { read: ["ls"] } } }),
+    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { allow: ["ls"] } } }),
   })
   const first = { command: "ls" }
   await h.call("bash", first, "dup")
@@ -146,7 +146,7 @@ import { handler, specOf, specPathOf, workdir, stateDir, ext } from "../harness.
   //     同一目录里的 git-excludes 绝不能碰。清扫读的是状态目录，所以把它指到临时目录。
   const h2 = await handler({
     cwd: workdir,
-    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { read: ["ls"] } } }),
+    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { allow: ["ls"] } } }),
   })
   const fakeState = mkdtempSync(join(tmpdir(), "pi-specsweep-"))
   const cache = fakeState
@@ -193,7 +193,7 @@ import { handler, specOf, specPathOf, workdir, stateDir, ext } from "../harness.
     bindings: JSON.stringify({
       "pi-subagents-extend/1": {
         scope: ["."],
-        bash: { read: ["git status", "node", "re:^ls -la$"] },
+        bash: { allow: ["git status", "node", "re:^ls -la$"], writable: true },
       },
     }),
   })
@@ -283,7 +283,7 @@ import { handler, specOf, specPathOf, workdir, stateDir, ext } from "../harness.
     bindings: JSON.stringify({
       "pi-subagents-extend/1": {
         scope: ["src/**"],
-        bash: { read: ["git status"], writable: true, writablePaths: [grant] },
+        bash: { allow: ["git status"], writable: true, writablePaths: [grant] },
       },
     }),
     cwd: outsideTmp,
@@ -311,7 +311,7 @@ import { handler, specOf, specPathOf, workdir, stateDir, ext } from "../harness.
     bindings: JSON.stringify({
       "pi-subagents-extend/1": {
         scope: ["src/**"],
-        bash: { read: ["git status"], writable: true, writablePaths: [grant] },
+        bash: { allow: ["git status"], writable: true, writablePaths: [grant] },
       },
     }),
     cwd: outsideTmp,
@@ -333,7 +333,7 @@ import { handler, specOf, specPathOf, workdir, stateDir, ext } from "../harness.
     bindings: JSON.stringify({
       "pi-subagents-extend/1": {
         scope: ["src/**"],
-        bash: { read: ["git status"], writable: true, writablePaths: [inside] },
+        bash: { allow: ["git status"], writable: true, writablePaths: [inside] },
       },
     }),
     cwd: outsideTmp,
@@ -364,7 +364,7 @@ import { handler, specOf, specPathOf, workdir, stateDir, ext } from "../harness.
     bindings: JSON.stringify({
       "pi-subagents-extend/1": {
         scope: ["src/**"],
-        bash: { read: ["git status"], writable: true, writablePaths: [grantViaLink] },
+        bash: { allow: ["git status"], writable: true, writablePaths: [grantViaLink] },
       },
     }),
     cwd: outsideTmp,
@@ -405,7 +405,7 @@ import { handler, specOf, specPathOf, workdir, stateDir, ext } from "../harness.
     bindings: JSON.stringify({
       "pi-subagents-extend/1": {
         scope: ["src/**"],
-        bash: { read: ["git status"], writable: true, writablePaths: [grantInside] },
+        bash: { allow: ["git status"], writable: true, writablePaths: [grantInside] },
       },
     }),
     cwd: outsideTmp,

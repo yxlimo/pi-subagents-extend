@@ -91,34 +91,6 @@ import "../support.ts"
 
 
 
-// 276. /permission prints the allow column and the legacy read/write columns on separate lines.
-{
-  const h = await handler({
-    bindings: JSON.stringify({
-      "pi-subagents-extend/1": {
-        scope: ["src/**"],
-        bash: { allow: ["git diff --stat"], read: ["cat r"], write: ["cat w"] },
-      },
-    }),
-  })
-  const notified: string[] = []
-  await h.commands["permission"].handler("", { cwd: workdir, ui: { notify: (m: string) => notified.push(m) } })
-  const lines = notified.join("\n").split("\n")
-  const allowLine = lines.find((line) => line.startsWith("bash allow"))
-  const legacyLine = lines.find((line) => line.startsWith("bash (legacy columns, migrate to allow): "))
-  assert.ok(allowLine, "the allow column has its own line")
-  assert.ok(legacyLine, "the legacy columns have their own line")
-  assert.equal(allowLine, "bash allow (no write access: commands that write are refused): git diff --stat", "the allow line names only the allow column")
-  assert.equal(
-    legacyLine,
-    "bash (legacy columns, migrate to allow): read cat r | write cat w",
-    "the legacy line names both legacy columns",
-  )
-  assert.ok(!allowLine?.includes("read cat r"), "the allow line does not carry a legacy column")
-  assert.ok(!legacyLine?.includes("git diff --stat"), "the legacy line does not carry the allow entry")
-  h.restore()
-  console.log("  ok   /permission keeps the allow column and the legacy columns on separate lines")
-}
 
 // 277. /permission states no-write-access on the allow column itself, not per entry.
 {
@@ -201,24 +173,6 @@ import "../support.ts"
   console.log("  ok   /permission prints a plain allow line when the column is writable")
 }
 
-// 280. /permission does not describe a write gate that an empty allow column cannot trigger.
-{
-  const h = await handler({
-    bindings: JSON.stringify({
-      "pi-subagents-extend/1": {
-        scope: ["src/**"],
-        bash: { read: ["cat r"], write: ["cat w"] },
-      },
-    }),
-  })
-  const notified: string[] = []
-  await h.commands["permission"].handler("", { cwd: workdir, ui: { notify: (m: string) => notified.push(m) } })
-  const text = notified.join("\n")
-  assert.ok(text.includes("bash allow: (none)"), "the empty allow column is printed")
-  assert.equal(text.includes("no write access"), false, "the write note needs an allow match to apply")
-  h.restore()
-  console.log("  ok   /permission keeps the no-write note off a legacy-only policy")
-}
 
 // 281. A role md that only repeats a default must not be named as a source layer.
 //      Filling a field the payload left out is not the same as changing the outcome: an

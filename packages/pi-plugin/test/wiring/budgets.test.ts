@@ -19,7 +19,7 @@ import { handler, specOf, fakeClock, defaultProbe, workdir, repo } from "../harn
 {
   const h = await handler({
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["src/**"], maxDenies: 2, bash: { read: ["pnpm run typecheck"] } },
+      "pi-subagents-extend/1": { scope: ["src/**"], maxDenies: 2, bash: { allow: ["pnpm run typecheck"], writable: true} },
     }),
   })
   const counted = (reason: string): boolean => /in a row|denial budget/.test(reason)
@@ -286,16 +286,16 @@ import { handler, specOf, fakeClock, defaultProbe, workdir, repo } from "../harn
 //     一句「重试没用」的说明 —— 否则模型会把它当成偶发失败，原样再跑一遍。
 {
   const { parseBashRule } = await import(join(repo, "src", "bash/index.ts"))
-  assert.equal(parseBashRule({ read: ["pnpm test"] })?.cpuStallSeconds, false, "off unless asked for")
-  assert.equal(parseBashRule({ read: ["pnpm test"], cpuStallSeconds: false })?.cpuStallSeconds, false, "explicit false stays off")
-  assert.equal(parseBashRule({ read: ["pnpm test"], cpuStallSeconds: 0 })?.cpuStallSeconds, false, "0 means off, not kill at once")
-  assert.equal(parseBashRule({ read: ["pnpm test"], cpuStallSeconds: 90 })?.cpuStallSeconds, 90, "a positive value arms it")
-  assert.equal(parseBashRule({ read: ["pnpm test"], cpuStallSeconds: "60" })?.cpuStallSeconds, false, "a string is refused, not coerced (see 78)")
+  assert.equal(parseBashRule({ allow: ["pnpm test"] })?.cpuStallSeconds, false, "off unless asked for")
+  assert.equal(parseBashRule({ allow: ["pnpm test"], cpuStallSeconds: false })?.cpuStallSeconds, false, "explicit false stays off")
+  assert.equal(parseBashRule({ allow: ["pnpm test"], cpuStallSeconds: 0 })?.cpuStallSeconds, false, "0 means off, not kill at once")
+  assert.equal(parseBashRule({ allow: ["pnpm test"], cpuStallSeconds: 90 })?.cpuStallSeconds, 90, "a positive value arms it")
+  assert.equal(parseBashRule({ allow: ["pnpm test"], cpuStallSeconds: "60" })?.cpuStallSeconds, false, "a string is refused, not coerced (see 78)")
 
   const armed = await handler({
     cwd: workdir,
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: [workdir], bash: { write: ["node"], cpuStallSeconds: 90 } },
+      "pi-subagents-extend/1": { scope: [workdir], bash: { allow: ["node"], writable: true, cpuStallSeconds: 90} },
     }),
   })
   const armedInput = { command: "node build.mjs" }
@@ -305,7 +305,7 @@ import { handler, specOf, fakeClock, defaultProbe, workdir, repo } from "../harn
 
   const plain = await handler({
     cwd: workdir,
-    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: [workdir], bash: { write: ["node"] } } }),
+    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: [workdir], bash: { allow: ["node"], writable: true} } }),
   })
   const plainInput = { command: "node build.mjs" }
   await plain.call("bash", plainInput)
@@ -414,9 +414,9 @@ import { handler, specOf, fakeClock, defaultProbe, workdir, repo } from "../harn
 //     Number() 会变成 1，即「静默 1 秒就杀整棵树」，而不是「开」。
 {
   const { parseBashRule } = await import(join(repo, "src", "bash/index.ts"))
-  assert.equal(parseBashRule({ read: ["x"], cpuStallSeconds: 0.5 })?.cpuStallSeconds, false, "a fraction below 1 is off, not 0")
-  assert.equal(parseBashRule({ read: ["x"], cpuStallSeconds: true })?.cpuStallSeconds, false, "true is not a threshold")
-  assert.equal(parseBashRule({ read: ["x"], cpuStallSeconds: "60" })?.cpuStallSeconds, false, "a string is not a number either")
-  assert.equal(parseBashRule({ read: ["x"], cpuStallSeconds: 1.9 })?.cpuStallSeconds, 1, "a fraction above 1 floors")
+  assert.equal(parseBashRule({ allow: ["x"], cpuStallSeconds: 0.5 })?.cpuStallSeconds, false, "a fraction below 1 is off, not 0")
+  assert.equal(parseBashRule({ allow: ["x"], cpuStallSeconds: true })?.cpuStallSeconds, false, "true is not a threshold")
+  assert.equal(parseBashRule({ allow: ["x"], cpuStallSeconds: "60" })?.cpuStallSeconds, false, "a string is not a number either")
+  assert.equal(parseBashRule({ allow: ["x"], cpuStallSeconds: 1.9 })?.cpuStallSeconds, 1, "a fraction above 1 floors")
   console.log("  ok   看门狗阈值只接受正数字：0.5 与 true 都是关，不会变成 0 或 1")
 }

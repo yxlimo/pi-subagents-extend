@@ -175,9 +175,6 @@ export function activate(pi: ExtensionAPI, options: ActivateOptions = {}) {
 					w.policy.bash
 						? permissionAllowColumn(w.policy.bash)
 						: "bash: off",
-					w.policy.bash && (w.policy.bash.read.length > 0 || w.policy.bash.write.length > 0)
-						? `bash (legacy columns, migrate to allow): read ${w.policy.bash.read.join(" | ") || "(none)"} | write ${w.policy.bash.write.join(" | ") || "(none)"}`
-						: undefined,
 					w.policy.bash && w.policy.bash.deny.length > 0
 						? `bash deny (cannot be lifted): ${w.policy.bash.deny.join(" | ")}`
 						: undefined,

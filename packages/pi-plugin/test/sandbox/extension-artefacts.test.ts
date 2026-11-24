@@ -12,7 +12,7 @@ import { described, testState } from "../support.ts"
 // 47. Build/test artefact directories are derived from what the project uses.
 {
   const bindings = (extra: Record<string, unknown>): string =>
-    JSON.stringify({ "pi-subagents-extend/1": { scope: ["src/**"], bash: { write: ["pnpm test"], writable: true, ...extra } } })
+    JSON.stringify({ "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["pnpm test"], writable: true, ...extra} } })
   const grantedIn = (spec: SandboxSpec, ...parts: string[]): boolean => spec.write.some((d: string) => d.endsWith(`/${join(...parts)}`))
 
   // A Node project: the toolchain is recognised, but its output directory is not
@@ -89,7 +89,7 @@ import { described, testState } from "../support.ts"
   const h = await handler({
     cwd: repo,
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["src/**"], bash: { read: ["pnpm test"], writable: true } },
+      "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["pnpm test"], writable: true } },
     }),
   })
   const notified: string[] = []
@@ -139,7 +139,7 @@ import { described, testState } from "../support.ts"
     const out = await runLive(
       dir,
       JSON.stringify({
-        "pi-subagents-extend/1": { scope: ["src/**"], bash: { write: ["cargo test"], writable: true } },
+        "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["cargo test"], writable: true} },
       }),
       "cargo test --offline",
     )
@@ -167,7 +167,7 @@ import { described, testState } from "../support.ts"
     const out = await runLive(
       dir,
       JSON.stringify({
-        "pi-subagents-extend/1": { scope: ["*.go"], bash: { write: ["go test"], writable: true } },
+        "pi-subagents-extend/1": { scope: ["*.go"], bash: { allow: ["go test"], writable: true} },
       }),
       "go test ./...",
     )
@@ -188,7 +188,7 @@ import { described, testState } from "../support.ts"
 {
   const h = await handler({
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["src/**"], bash: { read: ["python3", "echo", "node"] } },
+      "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["python3", "echo", "node"], writable: true } },
     }),
   })
   const allowed = async (command: string, why: string): Promise<void> => {
@@ -228,7 +228,7 @@ import { described, testState } from "../support.ts"
     bindings: JSON.stringify({
       "pi-subagents-extend/1": {
         scope: ["src/**"],
-        bash: { read: ["node test/x.ts"], write: ["pnpm run fix"] },
+        bash: { allow: ["node test/x.ts", "pnpm run fix", "cat src/a.ts"], writable: true},
       },
     }),
   })
@@ -244,10 +244,10 @@ import { described, testState } from "../support.ts"
     assert.equal(await h.call("edit", { path: "src/a.ts", content: "x" }), undefined, "the edit between runs is allowed")
   }
 
-  // 对照：没有改动时原地重复，判据照旧生效
-  assert.equal(await h.call("bash", { command: "node test/x.ts" }), undefined, "first bare repeat runs")
-  assert.equal(await h.call("bash", { command: "node test/x.ts" }), undefined, "second bare repeat runs")
-  const warned = await h.call("bash", { command: "node test/x.ts" })
+  // 对照：没有改动时原地重复，判据照旧生效（读类命令才受这条判据约束）
+  assert.equal(await h.call("bash", { command: "cat src/a.ts" }), undefined, "first bare repeat runs")
+  assert.equal(await h.call("bash", { command: "cat src/a.ts" }), undefined, "second bare repeat runs")
+  const warned = await h.call("bash", { command: "cat src/a.ts" })
   assert.match(warned?.reason ?? "", /spinning/, "without a change in between, the third repeat still warns")
   h.restore()
   console.log("  ok   打转判据把写活动算作进展；无改动的原地重复照旧拦截")
@@ -309,7 +309,7 @@ import { described, testState } from "../support.ts"
           "pi-subagents-extend/1": {
             scope: ["**"],
             writeScope: ["planted"],
-            bash: { write: ["git add b.txt", "sh write.sh"], writable: true },
+            bash: { allow: ["git add b.txt", "sh write.sh"], writable: true},
           },
         }),
       })
@@ -379,7 +379,7 @@ import { described, testState } from "../support.ts"
 
     const bindingsFor = (writeScope: string[]): string =>
       JSON.stringify({
-        "pi-subagents-extend/1": { scope: ["src/**"], writeScope, bash: { write: ["sh write.sh"], writable: true } },
+        "pi-subagents-extend/1": { scope: ["src/**"], writeScope, bash: { allow: ["sh write.sh"], writable: true} },
       })
     const sandboxed = async (h: Harness, command: string): Promise<string> => {
       const input = { command }

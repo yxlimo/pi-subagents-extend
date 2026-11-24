@@ -41,16 +41,16 @@ The three criteria that can misfire on slow tasks must be explicitly configured:
 Only two kinds of events reset the idle timer:
 
 1. `edit` / `write` tool calls
-2. bash commands matching the `bash.write` column
+2. bash commands the classifier judges as writes
 
 A repeat counts only when its **output did not change**. The same command returning new output is
 progress — that is what measuring a repository looks like — so the count resets and a warning already
 issued is withdrawn. A child that is genuinely stuck prints the same thing every time and still walks
 into the threshold.
 
-Only **read-class** commands are counted for spinning: a command that writes (the `bash.write` column, or an `edit`/`write` call) is progress, so it clears the counts and cancels a warning already issued. A coder that edits a file and re-runs the same test command is therefore never stopped by this criterion — a config that lists an interpreter in the `write` column (`node`, `python3`) exempts that interpreter's commands entirely.
+Only **read-class** commands are counted for spinning: a command that writes (a `bash.allow` entry whose command the classifier judges as a write, or an `edit`/`write` call) is progress, so it clears the counts and cancels a warning already issued. A coder that edits a file and re-runs the same test command is therefore never stopped by this criterion — listing an interpreter (`node`, `python3`) in `bash.allow` exempts that interpreter's commands entirely, since interpreters are classified as writes.
 
-Commands in the `bash.read` column, and `read` / `grep` / `find` / `ls`, do not count. So "spinning with read-only bash commands" and "repeatedly scanning with read tools" are both judged as idling — this is intentional: no amount of read-only commands counts as progress.
+Read-class bash commands, and `read` / `grep` / `find` / `ls`, do not count. So "spinning with read-only bash commands" and "repeatedly scanning with read tools" are both judged as idling — this is intentional: no amount of read-only commands counts as progress.
 
 Corollary: if a task genuinely needs extensive read-only investigation, either loosen `idleWriteMs` or set `readOnly: true` (which skips both time-based criteria, "read-only idling" and "finished early").
 

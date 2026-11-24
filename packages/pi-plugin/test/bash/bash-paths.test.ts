@@ -86,7 +86,7 @@ function pathCandidates(command: string): string[] {
 {
   const h = await handler({
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["src/**"], bash: { read: ["rg"] }, maxDenies: 0 },
+      "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["rg"] }, maxDenies: 0 },
     }),
     cwd: workdir,
   })
@@ -105,7 +105,7 @@ function pathCandidates(command: string): string[] {
 {
   const h = await handler({
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["src/**"], bash: { read: ["rg"] } },
+      "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["rg"] } },
     }),
     cwd: workdir,
   })
@@ -122,7 +122,7 @@ function pathCandidates(command: string): string[] {
 {
   const h = await handler({
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["src/**"], bash: { read: ["rg"] }, maxDenies: 0 },
+      "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["rg"] }, maxDenies: 0 },
     }),
     cwd: workdir,
   })
@@ -138,7 +138,7 @@ function pathCandidates(command: string): string[] {
 {
   const h = await handler({
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["src/**"], bash: { read: ["node"] } },
+      "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["node"], writable: true } },
     }),
     cwd: workdir,
   })
@@ -155,7 +155,7 @@ function pathCandidates(command: string): string[] {
 {
   const h = await handler({
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["src/**"], bash: { write: ["pnpm test"] } },
+      "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["pnpm test"], writable: true } },
     }),
     cwd: workdir,
   })
@@ -172,7 +172,7 @@ function pathCandidates(command: string): string[] {
 {
   const h = await handler({
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["src/**"], bash: { read: ["rg"] }, maxDenies: 0 },
+      "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["rg"] }, maxDenies: 0 },
     }),
     cwd: workdir,
   })
@@ -197,7 +197,7 @@ function pathCandidates(command: string): string[] {
 {
   const h = await handler({
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["src/**"], bash: { read: ["rg"] } },
+      "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["rg"] } },
     }),
     cwd: workdir,
   })
@@ -228,7 +228,7 @@ function pathCandidates(command: string): string[] {
 {
   const h = await handler({
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["src/**"], bash: { read: ["rg"] }, maxDenies: 0 },
+      "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["rg"] }, maxDenies: 0 },
     }),
     cwd: workdir,
   })
@@ -247,7 +247,7 @@ function pathCandidates(command: string): string[] {
 {
   const h = await handler({
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["src/**"], bash: { read: ["re:/nix/store/[^ ]+/bin/rg .+"] } },
+      "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["re:/nix/store/[^ ]+/bin/rg .+"] } },
     }),
     cwd: workdir,
   })
@@ -267,7 +267,7 @@ function pathCandidates(command: string): string[] {
 {
   const h = await handler({
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["src/**"], bash: { read: ["rg"] }, maxDenies: 0 },
+      "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["rg"] }, maxDenies: 0 },
     }),
     cwd: workdir,
   })
@@ -288,7 +288,7 @@ function pathCandidates(command: string): string[] {
 {
   const h = await handler({
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["src/**"], bash: { read: ["sed"] } },
+      "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["sed"] } },
     }),
     cwd: workdir,
   })
@@ -306,7 +306,7 @@ function pathCandidates(command: string): string[] {
 {
   const h = await handler({
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["src/**"], bash: { read: ["rg"] } },
+      "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["rg"] } },
     }),
     cwd: workdir,
   })
@@ -324,7 +324,7 @@ function pathCandidates(command: string): string[] {
 {
   const h = await handler({
     bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["src/**"], bash: { read: ["rg"] } },
+      "pi-subagents-extend/1": { scope: ["src/**"], bash: { allow: ["rg"] } },
     }),
     cwd: workdir,
   })

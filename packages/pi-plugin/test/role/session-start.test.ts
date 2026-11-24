@@ -353,13 +353,6 @@ const rc = (await import(join(repo, "src", "role-config.ts"))) as unknown as typ
   console.log("  ok   permissions map onto scope, write, budgets and the rest")
 }
 
-// 193. permissions.bash is reported, not silently dropped.
-{
-  const out = rc.policyFromBlock({ permissions: { scope: ["."], bash: { read: ["git status"] } } })
-  assert.ok(out.problems.some((p) => p.includes("the legacy read/write spelling belongs to bindings")))
-  assert.deepEqual(out.policy?.scope, ["."], "the other fields still convert")
-  console.log("  ok   permissions.bash reports the legacy spelling and points to bindings")
-}
 
 // 194. Wired top-level blocks are no longer reported; unknown ones still are.
 {

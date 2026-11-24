@@ -18,7 +18,7 @@ export const BINDING_VERSION = 1;
 
 export const bindingKey = (): string => `${BINDING_NAMESPACE}/${BINDING_VERSION}`;
 
-/** md 里的 bash 单列授权：只收新拼法，legacy 的 read / write 属于 bindings。 */
+/** md 里的 bash 单列授权。 */
 export interface RoleBashPolicy {
 	allow?: string[];
 	deny?: string[];
@@ -346,10 +346,7 @@ export function policyFromBlock(block: Record<string, unknown>): { policy?: Role
 				converted[key] = value;
 			}
 			for (const key of Object.keys(bash)) {
-				if (key === "read" || key === "write") {
-					// legacy 拼法属于 bindings，不属于 md：保留这句事实并指出现在新写法。
-					problems.push(`permissions.bash: the legacy read/write spelling belongs to bindings, not to the md; use "allow" instead`);
-				} else if (!["allow", "deny", "writable", "network", "dependencyGate"].includes(key)) {
+				if (!["allow", "deny", "writable", "network", "dependencyGate"].includes(key)) {
 					problems.push(`permissions.bash.${key}: unknown key`);
 				}
 			}

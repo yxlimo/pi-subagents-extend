@@ -8,10 +8,9 @@
  * 不自动探测正则：命令参数本身就常含 `*`、`.`、`(`（glob 输入、shell 分支），
  * 猜错方向是误授权，比误拒绝危险得多。
  *
- * 读写归类供探针使用：legacy 的 read / write 列按列定读写（两侧都命中以 write 为准，
- * 保守方向）；新的 allow 单列用 commandAccess 从命令本身判读写，read / write 留作兼容列。
+ * 读写归类供探针使用：allow 单列用 commandAccess 从命令本身判读写。
  *
- * 从 bash/index.ts 拆出来的规则层：白名单三列的匹配、归类与 bash 配置的解析。
+ * 从 bash/index.ts 拆出来的规则层：白名单的匹配、归类与 bash 配置的解析。
  * 两层接线（角色 md 基线逐字段补进派单载荷、bash.deny 并集作硬底线）在
  * wiring/context.ts 的 applyRoleBaseline。
  * bash/index.ts 仍是唯一入口，这里的东西由它转出口。
@@ -24,9 +23,7 @@ import { RE_PREFIX, tokens } from "./tokens.ts";
 export type BashAccess = "read" | "write";
 
 export interface BashRule {
-	read: string[];
-	write: string[];
-	/** 新的单列白名单：读写由 commandAccess 从命令本身判，不再预先分列。 */
+	/** 白名单单列：读写由 commandAccess 从命令本身判，不预先分列。 */
 	allow: string[];
 	/** 允许网络（默认关闭，沙箱内使用私有网络命名空间）。 */
 	network: boolean;
@@ -74,8 +71,6 @@ export interface BashRule {
 
 export interface BashMatch {
 	access: BashAccess;
-	/** 命中哪一列：legacy 的 read / write，或是新的 allow。 */
-	column: "read" | "write" | "allow";
 	/** 命中的条目原文，用于拒绝文案与诊断。 */
 	entry: string;
 }
@@ -106,25 +101,17 @@ export function commandMatches(pattern: string, command: string): boolean {
 }
 
 /**
- * 归类一条命令。legacy 两列先判且各按原义：write 命中 = write，read 命中 = read；
- * allow 列最后判，读写由 commandAccess 从命令本身推出来。
- *
- * allow 排在 legacy 两列之后是刻意的：同一条命令同时列进 write 与 allow 时，legacy 语义
- * 必须原样保留（这个兼容阶段不改老配置的行为）；先判 allow 会把它重新判成可能的 read。
+ * 归类一条命令：命中 allow 单列，读写由 commandAccess 从命令本身推出来。
  */
 export function classifyCommand(rule: BashRule, command: string): BashMatch | undefined {
-	const write = rule.write.find((entry) => commandMatches(entry, command));
-	if (write !== undefined) return { access: "write", column: "write", entry: write };
-	const read = rule.read.find((entry) => commandMatches(entry, command));
-	if (read !== undefined) return { access: "read", column: "read", entry: read };
 	const allow = rule.allow.find((entry) => commandMatches(entry, command));
-	if (allow !== undefined) return { access: commandAccess(command, rule.writable), column: "allow", entry: allow };
+	if (allow !== undefined) return { access: commandAccess(command, rule.writable), entry: allow };
 	return undefined;
 }
 
-/** 全部条目（供拒绝文案与诊断），三列都要列。 */
+/** 全部条目（供拒绝文案与诊断）。 */
 export function allEntries(rule: BashRule): string[] {
-	return [...rule.read, ...rule.write, ...rule.allow];
+	return [...rule.allow];
 }
 
 /** 命中禁止列表时返回该条目原文，否则 undefined。 */
@@ -157,13 +144,9 @@ function stringMap(value: unknown): Record<string, string> {
 export function parseBashRule(raw: unknown): BashRule | undefined {
 	if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
 	const cfg = raw as Record<string, unknown>;
-	const read = stringList(cfg.read);
-	const write = stringList(cfg.write);
 	const allow = stringList(cfg.allow);
-	if (read.length === 0 && write.length === 0 && allow.length === 0) return undefined;
+	if (allow.length === 0) return undefined;
 	return {
-		read,
-		write,
 		allow,
 		network: cfg.network === true,
 		writable: cfg.writable === true,

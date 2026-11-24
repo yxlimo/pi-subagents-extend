@@ -160,19 +160,12 @@ function permissionsOf(jsonObjectsInBlock: JsonObject[]): Record<string, unknown
   return undefined;
 }
 
-/** reader 仍接受 legacy 列，所以文档示例要靠这条规则拦，不能靠「reader 是否接受」。 */
-function legacyBashColumns(permissions: Record<string, unknown>): string[] {
-  const bash = permissions.bash;
-  if (!bash || typeof bash !== "object" || Array.isArray(bash)) return [];
-  return ["read", "write"].filter((column) => Object.hasOwn(bash, column));
-}
 
 
 const payloads: Payload[] = [];
 const skippedBlocks: string[] = [];
 const bareObjects: Payload[] = [];
 const unknownKeyObjects: Payload[] = [];
-const legacyColumns: string[] = [];
 const wrap = (permissions: Record<string, unknown>): string =>
   JSON.stringify({ [bindingKey()]: { permissions } });
 const describe = (example: Payload): string =>
@@ -189,8 +182,6 @@ for (const block of blocks) {
     const permissions = permissionsOf(objects);
     const example: Payload = { ...block, json, kind: "payload", permissions: permissions ?? {} };
     payloads.push(example);
-    const columns = legacyBashColumns(example.permissions);
-    if (columns.length > 0) legacyColumns.push(`${describe(example)}: bash.${columns.join(" and bash.")}`);
     continue;
   }
   // 裸权限对象：整个对象就是 permissions；两个键以上、且至少有一个 reader 认识的键，
@@ -209,8 +200,6 @@ for (const block of blocks) {
     kind,
     permissions: candidate.value,
   };
-  const columns = legacyBashColumns(example.permissions);
-  if (columns.length > 0) legacyColumns.push(`${describe(example)}: bash.${columns.join(" and bash.")}`);
   if (kind === "bare") bareObjects.push(example);
   else unknownKeyObjects.push(example);
 }
@@ -296,14 +285,8 @@ assert.equal(
   `${writeRefusals.length}/${writeChecked} documented bash.allow commands were refused as writes:\n${writeRefusals.join("\n")}`,
 );
 
-// legacy 列 reader 仍接受（只告警），所以 acceptance 之外还要单独拦文档示例。
-assert.equal(
-  legacyColumns.length,
-  0,
-  `${legacyColumns.length} documented examples still teach a legacy bash column; replace the column with "bash": { "allow": [...] } (read/write is judged internally):\n${legacyColumns.join("\n")}`,
-);
 
 console.log(
-  `reader checks: refused ${refusals.length}, bash.allow commands exercised ${writeChecked}, write-refused ${writeRefusals.length}, legacy bash columns ${legacyColumns.length}`,
+  `reader checks: refused ${refusals.length}, bash.allow commands exercised ${writeChecked}, write-refused ${writeRefusals.length}`,
 );
 console.log("documented binding payload tests passed");

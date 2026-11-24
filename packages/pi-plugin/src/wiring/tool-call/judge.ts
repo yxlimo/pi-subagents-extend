@@ -461,14 +461,14 @@ export const judgeToolCall = async ({
 			);
 		}
 		// allow 列放行的写类命令，role 却没给写权限：这是写拒，计入写预算而非撞权限预算。
-		// 判据是「确实有一条 allow 授权」+ 命令本身会写 + writable:false，不看 classifyCommand 报的列：
-		// 同一条命令也命中 legacy 列时那列会先被报出来，但 legacy 不授予写权限。
-		// classifyCommand 在 writable=false 时已把 access 压成 read，这里用固有判定（传 true）
-		// 认出「这条命令本来会写」，否则它会以只读的名义被放行去写。
+		// 白名单放行的写类命令，role 却没给写权限：这是写拒，计入写预算而非撞权限预算。
+		// 判据是「确实有一条 allow 授权」+ 命令本身会写 + writable:false；classifyCommand 在
+		// writable=false 时已把 access 压成 read，所以这里用固有判定（传 true）认出「这条命令
+		// 本来会写」，否则它会以只读的名义被放行去写。
 		if (rule.allow.some((entry) => commandMatches(entry, command)) && rule.writable === false && commandAccess(command, true) === "write") {
 			return writeBail(
 				w,
-				`pi-subagents-extend: the role may run this command (it is in bash.allow)${match.column === "allow" ? "" : ` (matched the legacy ${match.column} column, which does not grant writes)`}, but bash.writable: false gives no write access: "${preview([command])}". This is a write refusal, not a grant error — deliver the result as a report, or have the parent set bash.writable: true.`
+				`pi-subagents-extend: the role may run this command (it is in bash.allow), but bash.writable: false gives no write access: "${preview([command])}". This is a write refusal, not a grant error — deliver the result as a report, or have the parent set bash.writable: true.`
 			);
 		}
 		// 只读类命令的参数路径：沙箱读面是 `/`（工具链要读 /nix/store），所以路径引导放在插件层。

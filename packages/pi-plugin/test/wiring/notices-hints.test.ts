@@ -25,7 +25,7 @@ import { handler, repo, workdir } from "../harness.ts"
   writeFileSync(join(tree, "packages", "pi-plugin", "package.json"), JSON.stringify({ scripts: { typecheck: "tsc" } }))
   const h = await handler({
     cwd: tree,
-    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { read: ["pnpm run typecheck"] } } }),
+    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { allow: ["pnpm run typecheck"], writable: true} } }),
   })
   const notices = h.ui.join("\n")
   assert.match(notices, /can never match/, "session_start warns about entries that can never match")
@@ -42,7 +42,7 @@ import { handler, repo, workdir } from "../harness.ts"
   const tree = mkdtempSync(join(tmpdir(), "pi-subagents-extend-unreach-deny-"))
   const h = await handler({
     cwd: tree,
-    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { read: ["pnpm run lint"] } } }),
+    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { allow: ["pnpm run lint"], writable: true} } }),
   })
   const refused = await h.call("bash", { command: "pnpm run typecheck" })
   assert.equal(refused?.block, true, "a command missing from the allowlist is refused")
@@ -61,7 +61,7 @@ import { handler, repo, workdir } from "../harness.ts"
   const tree = mkdtempSync(join(tmpdir(), "pi-subagents-extend-unreach-other-"))
   const h = await handler({
     cwd: tree,
-    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { read: ["pnpm run typecheck"] } } }),
+    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { allow: ["pnpm run typecheck"], writable: true} } }),
   })
   const refused = await h.call("bash", { command: "rg foo x.ts" })
   assert.equal(refused?.block, true, "a command missing from the allowlist is refused")
@@ -81,7 +81,7 @@ import { handler, repo, workdir } from "../harness.ts"
 	writeFileSync(join(tree, "packages", "pi-plugin", "package.json"), JSON.stringify({ scripts: { typecheck: "tsc" } }))
 	const h = await handler({
 		cwd: tree,
-		bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { read: ["pnpm run typecheck"] } } }),
+		bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { allow: ["pnpm run typecheck"], writable: true} } }),
 	})
 	assert.equal(await h.call("bash", { command: "pnpm run typecheck" }), undefined, "the entry is allowlisted, so the command runs")
 	const failed = await h.result("bash", "ERR_PNPM_NO_PKG_MANIFEST  No package.json found", true)
@@ -108,7 +108,7 @@ import { handler, repo, workdir } from "../harness.ts"
 	const h = await handler({
 		cwd: tree,
 		bindings: JSON.stringify({
-			"pi-subagents-extend/1": { scope: ["."], bash: { read: ["pnpm --dir packages/a run build", "pnpm run typecheck"] } },
+			"pi-subagents-extend/1": { scope: ["."], bash: { allow: ["pnpm --dir packages/a run build", "pnpm run typecheck"], writable: true} },
 		}),
 	})
 	const reachable = "pnpm --dir packages/a run build"
@@ -140,7 +140,7 @@ import { handler, repo, workdir } from "../harness.ts"
 	}
 	const h = await handler({
 		cwd: tree,
-		bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { read: ["pnpm run build"] } } }),
+		bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { allow: ["pnpm run build"], writable: true} } }),
 	})
 	const notices = h.ui.join("\n")
 	assert.match(notices, /… and 2 more/, "the session warning stops at eight candidates and counts the rest")
@@ -165,7 +165,7 @@ import { handler, repo, workdir } from "../harness.ts"
 	const h = await handler({
 		cwd: tree,
 		bindings: JSON.stringify({
-			"pi-subagents-extend/1": { scope: ["."], bash: { read: ["pnpm --dir packages/a run build", "pnpm"] } },
+			"pi-subagents-extend/1": { scope: ["."], bash: { allow: ["pnpm --dir packages/a run build", "pnpm"], writable: true} },
 		}),
 	})
 	const exact = "pnpm --dir packages/a run build"
@@ -194,7 +194,7 @@ import { handler, repo, workdir } from "../harness.ts"
 	}
 	const h = await handler({
 		cwd: tree,
-		bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { read: ["pnpm run build"] } } }),
+		bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { allow: ["pnpm run build"], writable: true} } }),
 	})
 	const notices = h.ui.join("\n")
 	assert.match(notices, /only the first 8 are listed/, "the warning says the list is not complete")
@@ -215,7 +215,7 @@ import { handler, repo, workdir } from "../harness.ts"
 	const entries = Array.from({ length: 10 }, (_, i) => `pnpm run e${String(i + 1).padStart(2, "0")}`)
 	const h = await handler({
 		cwd: tree,
-		bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { read: entries } } }),
+		bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], bash: { allow: entries } } }),
 	})
 	const notices = h.ui.join("\n")
 	assert.match(notices, /10 allowlist entries can never match/, "the count still says how many there really are")
@@ -237,7 +237,7 @@ import { handler, repo, workdir } from "../harness.ts"
 	}
 	const h = await handler({
 		cwd: tree,
-		bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], maxDenies: 0, bash: { read: ["pnpm run build"] } } }),
+		bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["."], maxDenies: 0, bash: { allow: ["pnpm run build"], writable: true} } }),
 	})
 	const denied = await h.call("bash", { command: "pnpm run other" })
 	assert.equal(denied?.block, true, "a command outside the entry is refused")
@@ -258,12 +258,12 @@ import { handler, repo, workdir } from "../harness.ts"
 	const match = (await import(join(repo, "src", "bash/index.ts"))) as unknown as {
 		parseBashRule: (raw: unknown) => unknown
 	}
-	const rule = match.parseBashRule({ read: ["mise run typecheck", "re:^mise run test:(paths|policy)$"] })
+	const rule = match.parseBashRule({ allow: ["mise run typecheck", "re:^mise run test:(paths|policy)$"] })
 	const hint = notices.headEntriesHint(rule, "mise run test:all", workdir)
 	assert.match(hint, /mise run typecheck/, "the literal same-program entry is still listed")
 	assert.match(hint, /plus 1 regex entry/, "the hint says a regex entry may also match")
 	// 复数与「没有字面条时仍给提示」：只有正则条目时 listed 读 none，后缀照给。
-	const regexOnly = match.parseBashRule({ read: ["re:^mise run test:(paths|policy)$", "re:^mise run lint$"] })
+	const regexOnly = match.parseBashRule({ allow: ["re:^mise run test:(paths|policy)$", "re:^mise run lint$"] })
 	const regexHint = notices.headEntriesHint(regexOnly, "mise run test:all", workdir)
 	assert.match(regexHint, /plus 2 regex entries/, "the plural form counts every regex entry")
 	assert.match(regexHint, /: none \(plus 2 regex entries/, "with no literal siblings the hint still reports the regex entries")

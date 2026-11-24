@@ -46,7 +46,7 @@ before it — no module imports `index.ts`, which is what keeps the layers one-w
 | `paths.ts` | real paths, working-tree versus scope comparison, hidden-grant reporting |
 | `dependencies.ts` | lockfile discovery, the dependency gate, scratch-directory probing |
 | `budgets.ts` | the two refusal counters and their defaults |
-| `notices.ts` | what the extension says about a grant: unreachable entries, legacy columns, the compat layer |
+| `notices.ts` | what the extension says about a grant: unreachable entries, hidden grants, untracked role mds |
 | `sandbox.ts` | the helper process, the granted path set, the spec written per call, command wrapping |
 | `probe.ts` | gateway probing and the classification of a failure body |
 | `role-config.ts` | role-md resolution, the `extend` block, identity from the prompt |
@@ -149,14 +149,12 @@ Merging runs over two layers, and the direction is one way: role md → dispatch
 
 Rules per field — a field the dispatch names wins, a field it omits is filled from the md:
 
-- **replaced** — `allowTools`, `bash.read`, `bash.write`, `bash.allow`, `bash.writablePaths`. A
+- **replaced** — `allowTools`, `bash.allow`, `bash.writablePaths`. A
   field the dispatch names replaces the role md's list; a field it omits is filled from the md.
   These are grants, so a caller narrowing them is legitimate — a dispatch is made tighter than its
   role simply by writing a shorter list. For these columns an **explicitly empty array in the
   dispatch** is a different instruction: it empties that column rather than adding nothing.
   Reading `"allow": []` as "add zero entries" left the role md's whole allowlist in place, so a
-  dispatch that meant to close bash kept the grant. `bash.write` and `bash.allow` are separate
-  columns: `write` grants write, `allow` leaves the read/write judgement to the extension.
 - **union, hard floor** — `bash.deny`: **no caller can relax it**. That is what makes a project's
   structural prohibition different from an ordinary allowlist.
 - **replaced** — `scope`, `writeScope`. A task range has to be able to be *narrower* than the role

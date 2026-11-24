@@ -338,37 +338,24 @@ import "../support.ts"
   console.log("  ok   writable=false forces read; unknown programs are distinguishable")
 }
 
-// 213. parseBashRule gives allow its own column and keeps legacy read/write unchanged.
+// 213. parseBashRule takes the single allow column; a legacy-only config means no bash.
 {
   const only = bashApi.parseBashRule({ allow: ["git status"] })
-  assert.deepEqual(only?.read, [], "allow alone does not populate read")
-  assert.deepEqual(only?.write, [], "allow alone no longer populates write")
-  assert.deepEqual(only?.allow, ["git status"], "allow alone populates allow")
+  assert.deepEqual(only?.allow, ["git status"], "allow populates allow")
 
-  const legacy = bashApi.parseBashRule({ read: ["cat f"], write: ["rm f"], allow: ["git status"] })
-  assert.deepEqual(legacy?.read, ["cat f"], "legacy read is unchanged")
-  assert.deepEqual(legacy?.write, ["rm f"], "legacy write no longer absorbs allow")
-  assert.deepEqual(legacy?.allow, ["git status"], "allow stays separate")
+  assert.equal(bashApi.parseBashRule({ read: ["cat f"], write: ["rm f"] }), undefined, "legacy columns alone mean no bash")
 
-  assert.equal(bashApi.parseBashRule({}), undefined, "all three columns empty means no bash")
+  assert.equal(bashApi.parseBashRule({}), undefined, "an empty config means no bash")
   assert.equal(bashApi.parseBashRule({ allow: [] }), undefined, "an explicitly empty allow is still no bash")
-  console.log("  ok   parseBashRule keeps allow as its own column")
+  console.log("  ok   parseBashRule reads the single allow column")
 }
 
-// 214. classifyCommand takes access from the column that matched; allEntries includes allow.
+// 214. classifyCommand takes access from the allow entry; allEntries lists it.
 {
-  const legacy = bashApi.parseBashRule({ read: ["cat f"], write: ["rm f"] })
-  assert.ok(legacy)
-  assert.equal(bashApi.classifyCommand(legacy, "rm f")?.access, "write", "legacy write is still write")
-  assert.equal(bashApi.classifyCommand(legacy, "rm f")?.column, "write", "and reports the write column")
-  assert.equal(bashApi.classifyCommand(legacy, "cat f")?.access, "read", "legacy read is still read")
-  assert.equal(bashApi.classifyCommand(legacy, "cat f")?.column, "read", "and reports the read column")
-
   const allowed = bashApi.parseBashRule({ allow: ["rm w", "cat r", "frobnicate u"], writable: true })
   assert.ok(allowed)
   const w = bashApi.classifyCommand(allowed, "rm w")
   assert.equal(w?.access, "write", "allow + writer program is write")
-  assert.equal(w?.column, "allow", "and reports the allow column")
   assert.equal(bashApi.classifyCommand(allowed, "cat r")?.access, "read", "allow + reader program is read")
   const unknown = bashApi.classifyCommand(allowed, "frobnicate u")
   assert.equal(unknown?.access, "read", "allow + unknown program is read")
@@ -378,7 +365,7 @@ import "../support.ts"
   const ceiling = bashApi.parseBashRule({ allow: ["rm w"], writable: false })
   assert.ok(ceiling)
   assert.equal(bashApi.classifyCommand(ceiling, "rm w")?.access, "read", "writable:false ceilings an allow writer")
-  console.log("  ok   classifyCommand derives allow access from the program, legacy columns untouched")
+  console.log("  ok   classifyCommand derives access from the program")
 }
 
 // 215. An allow-listed writer with writable:false is refused before spawn, on the write budget.
@@ -433,9 +420,6 @@ import "../support.ts"
   assert.ok(bad.problems.some((p) => p.includes("mystery")), "unknown keys are still reported")
   assert.equal(bad.policy?.bash?.allow, undefined, "a bad allow is omitted")
 
-  const legacy = rc.policyFromBlock({ permissions: { scope: ["."], bash: { write: ["rm f"] } } })
-  assert.ok(legacy.problems.some((p) => p.includes('use "allow"')), "the md legacy spelling points to allow")
-  assert.equal(legacy.policy?.bash, undefined, "and is not accepted")
   console.log("  ok   md permissions.bash takes allow/deny/writable/network and reports bad keys")
 }
 
@@ -455,21 +439,6 @@ import "../support.ts"
   console.log("  ok   md permissions.bash.allow reaches the child and gates bash")
 }
 
-// 219. A legacy bash.read/bash.write config warns once about the migration.
-{
-  const h = await handler({
-    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["**"], bash: { read: ["cat f"], write: ["rm f"] } } }),
-  })
-  const warnings = h.ui.filter((m) => m.includes("legacy columns"))
-  assert.equal(warnings.length, 1, "one migration warning for the legacy config")
-  assert.match(warnings[0], /bash\.allow/, "the warning names the new column")
-  assert.match(warnings[0], /read\/write is judged internally/, "it says access is judged internally")
-  const before = h.ui.length
-  await h.call("bash", { command: "cat f" })
-  assert.equal(h.ui.length, before, "no repeat warning on a later call")
-  h.restore()
-  console.log("  ok   a legacy bash.read/write config warns once about bash.allow")
-}
 
 // 220. A failed write by an allow-listed unknown program explains that it ran read-only.
 {

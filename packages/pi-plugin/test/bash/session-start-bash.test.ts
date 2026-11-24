@@ -16,7 +16,7 @@ import "../support.ts"
     bindings: JSON.stringify({
       "pi-subagents-extend/1": {
         scope: ["src/**"],
-        bash: { read: ["git status"], writable: false, writablePaths: [grant] },
+        bash: { allow: ["git status"], writable: false, writablePaths: [grant] },
       },
     }),
     cwd,
@@ -102,41 +102,8 @@ import "../support.ts"
   console.log("  ok   isUnknownProgram scans every segment and keeps known readers known")
 }
 
-// 228. A command granted by `allow` is refused for writable:false even when a legacy write
-//      column also matches it: the gate keys off the allow grant and intrinsic write, not off
-//      which column classifyCommand reported first.
-{
-  const h = await handler({
-    bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["**"], bash: { write: ["rm"], allow: ["rm x"], writable: false }, maxWriteDenies: 1 },
-    }),
-  })
-  const input = { command: "rm x" }
-  const outcome = await h.call("bash", input)
-  assert.equal(outcome?.block, true, "the writer is refused before spawn")
-  assert.match(outcome?.reason ?? "", /the role may run this command/, "the allow grant is acknowledged")
-  assert.match(outcome?.reason ?? "", /bash\.writable: false gives no write access/, "the cause is named")
-  assert.match(outcome?.reason ?? "", /matched the legacy write column, which does not grant writes/, "the shadowing legacy column is named")
-  assert.equal(input.command, "rm x", "the command is not rewritten, so nothing was spawned")
-  h.restore()
-  console.log("  ok   an allow grant is refused for a writer even when a legacy write column matches first")
-}
 
-// 229. The same columns with the write ceiling granted run through the sandbox.
-{
-  const h = await handler({
-    bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["**"], bash: { write: ["rm"], allow: ["rm x"], writable: true }, maxWriteDenies: 1 },
-    }),
-  })
-  const input = { command: "rm x" }
-  assert.equal(await h.call("bash", input), undefined, "the writer runs when the role can write")
-  assert.match(input.command, /pi-subagents-extend-helper/, "it goes through the sandbox")
-  h.restore()
-  console.log("  ok   the same command runs when bash.writable is true")
-}
-
-// 230. An allow-only config with writable:false is still refused, with no legacy clause invented.
+// 228. An allow-only config with writable:false is refused on the write budget.
 {
   const h = await handler({
     bindings: JSON.stringify({
@@ -146,25 +113,10 @@ import "../support.ts"
   const outcome = await h.call("bash", { command: "rm x" })
   assert.equal(outcome?.block, true, "an allow-only writer is refused")
   assert.match(outcome?.reason ?? "", /bash\.writable: false gives no write access/, "the cause is named")
-  assert.doesNotMatch(outcome?.reason ?? "", /matched the legacy/, "and no legacy column is invented")
   h.restore()
-  console.log("  ok   allow-only + writable:false is still refused, with no legacy clause")
+  console.log("  ok   an allow-only writer is refused when the role cannot write")
 }
 
-// 231. A legacy-only config with writable:false is NOT refused before spawn: the early refusal
-//      belongs to the new single-column path, not to existing bindings.
-{
-  const h = await handler({
-    bindings: JSON.stringify({
-      "pi-subagents-extend/1": { scope: ["**"], bash: { write: ["rm"], writable: false }, maxWriteDenies: 1 },
-    }),
-  })
-  const input = { command: "rm x" }
-  assert.equal(await h.call("bash", input), undefined, "a legacy write command is not refused early")
-  assert.match(input.command, /pi-subagents-extend-helper/, "it still goes through the sandbox")
-  h.restore()
-  console.log("  ok   a legacy-only writer config has no new early refusal")
-}
 
 // 232. A role WITH the write ceiling does not get the "could not tell" sentence: the note's
 //      advice and cause must follow the role's actual grant.
@@ -185,23 +137,6 @@ import "../support.ts"
   console.log("  ok   a writable role's write note keeps the writablePaths advice and drops the cause")
 }
 
-// 233. A legacy bash column supplied by the dispatch bindings warns under that bindings
-//      source alone, not merged into any role-md attribution. (The profile layer is gone;
-//      the bindings env is the only non-md source that can still carry legacy columns.)
-{
-  const h = await handler({
-    bindings: JSON.stringify({ "pi-subagents-extend/1": { scope: ["src/**"], bash: { read: ["cat f"], write: ["rm f"] } } }),
-  })
-  const warnings = h.ui.filter((m) => m.includes("legacy columns"))
-  assert.equal(warnings.length, 1, "the bindings' legacy columns produce one warning")
-  assert.match(
-    warnings[0],
-    /^pi-subagents-extend: extensionBindings pi-subagents-extend\/1 still spells/,
-    "the warning is attributed to the bindings source alone",
-  )
-  h.restore()
-  console.log("  ok   a legacy column from the dispatch bindings warns under the bindings source")
-}
 
 
 // 234. A quoted value in a git global flag must not hide the verb: whitespace splitting used to
@@ -460,7 +395,7 @@ import "../support.ts"
   const bindings = JSON.stringify({
     "pi-subagents-extend/1": {
       scope: ["."],
-      bash: { read: ["git status"], writable: true },
+      bash: { allow: ["git status"], writable: true },
     },
   })
   const run = await childRun({
