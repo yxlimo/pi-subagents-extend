@@ -106,6 +106,11 @@ export type HelperCapabilities = {
 	landlock: { kernel_abi: number; required_abi: number; supported: boolean; reason?: string | null };
 	network_namespace: boolean;
 	resolver_sockets: string[];
+	/**
+	 * spec 里能带 `watch`（内核观察写入）。旧版 helper 的 spec 解析是 deny_unknown_fields，
+	 * 多一格就整份拒绝，所以这一格要按能力协商发，不能默认发。
+	 */
+	watch?: boolean;
 };
 
 const helperCache = new Map<string, HelperCapabilities | undefined>();

@@ -105,7 +105,7 @@ if (described?.landlock?.supported) {
   const stub = join(stubDir, "pi-subagents-extend-helper")
   writeFileSync(
     stub,
-    `#!/bin/sh\nprintf '%s\\n' '{"landlock":{"kernel_abi":7,"required_abi":7,"supported":true,"reason":null},"network_namespace":true,"resolver_sockets":[]}'\n`,
+    `#!/bin/sh\nprintf '%s\\n' '{"landlock":{"kernel_abi":7,"required_abi":7,"supported":true,"reason":null},"network_namespace":true,"resolver_sockets":[],"watch":true}'\n`,
   )
   chmodSync(stub, 0o755)
   process.env.PI_SUBAGENTS_EXTEND_HELPER_PATH = stub

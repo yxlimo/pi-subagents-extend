@@ -315,6 +315,10 @@ fn report() -> (serde_json::Value, bool) {
             "reason": reason,
         },
         "network_namespace": userns,
+        // 能力协商：spec 里能不能带 `watch`。旧版 helper 的 spec 解析是 deny_unknown_fields，
+        // 多一格就整份拒绝（实测 exit 77），所以插件必须先问、再决定要不要写那一格。
+        // 少一次观察只是少了「还在干活」的一条证据；多写一格会让这条命令根本跑不起来。
+        "watch": true,
         "resolver_sockets": resolver,
     });
     (report, supported)

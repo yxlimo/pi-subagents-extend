@@ -8,6 +8,9 @@
 // 一个认不得 `watch` 的旧 helper 会把整份 spec 判死，没开探针的会话不该因为这一格而全军覆没。
 
 import assert from "node:assert/strict";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 import { handler, specOf, workdir } from "../harness.ts";
 
@@ -76,6 +79,35 @@ function payload(probe: boolean): string {
 		!("watch" in spec),
 		`没有写范围就没有 watch，别给每次 bash 都挂一个空监视 —— ${JSON.stringify(spec)}`,
 	);
+}
+
+{
+	// 旧版 helper（spec 解析是 deny_unknown_fields，`--describe` 里没有 watch）必须拿到不带 watch 的
+	// spec。实测过反例：装了旧 helper 的新插件，每条命令都是 exit 77 `unknown field watch`，
+	// 沙箱里一条 bash 都跑不起来 —— 为一个「判进度」的可选证据付这个代价是错的。
+	const dir = mkdtempSync(path.join(os.tmpdir(), "old-helper-"));
+	const fake = path.join(dir, "pi-subagents-extend-helper");
+	writeFileSync(
+		fake,
+		"#!/bin/sh\nprintf '%s\\n' '{\"landlock\":{\"kernel_abi\":7,\"required_abi\":7,\"supported\":true,\"reason\":null},\"network_namespace\":true,\"resolver_sockets\":[]}'\n",
+	);
+	chmodSync(fake, 0o755);
+	const before = process.env.PI_SUBAGENTS_EXTEND_HELPER_PATH;
+	process.env.PI_SUBAGENTS_EXTEND_HELPER_PATH = fake;
+	try {
+		const h = await handler({ cwd: workdir, bindings: payload(true) });
+		const input = { command: "git status" };
+		assert.equal(await h.call("bash", input), undefined, "旧 helper 也照常放行命令");
+		const spec = specOf(input.command) as unknown as Record<string, unknown>;
+		assert.ok(
+			!("watch" in spec),
+			`不认识 watch 的 helper 不该收到这一格，否则整条命令死在 spec 解析 —— ${JSON.stringify(spec)}`,
+		);
+	} finally {
+		if (before === undefined) delete process.env.PI_SUBAGENTS_EXTEND_HELPER_PATH;
+		else process.env.PI_SUBAGENTS_EXTEND_HELPER_PATH = before;
+		rmSync(dir, { recursive: true, force: true });
+	}
 }
 
 console.log("观察写入的 spec 接线：有写范围就带 watch，没有就不带");

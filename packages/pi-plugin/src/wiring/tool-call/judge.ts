@@ -507,7 +507,9 @@ export const judgeToolCall = async ({
 		}
 		// 探针要判「这个代理还在干活吗」，写活动是其中一条证据，而这条证据只有内核给得准：
 		// 让 helper 在写范围上挂 inotify，结果写在 spec 旁边。没开探针就不付这份代价。
-		const watchRoots = w.probe ? observedWriteRoots(w.policy, cwd, rule) : undefined;
+		// `caps.watch` 是能力协商，不是版本判断：旧版 helper 的 spec 解析是 deny_unknown_fields，
+		// 多一格整份拒绝（实测 exit 77，于是每条命令都跑不起来）。少观察只是少一条证据。
+		const watchRoots = w.probe && caps.watch ? observedWriteRoots(w.policy, cwd, rule) : undefined;
 		const spec = buildSpec(cwd, rule, w.policy, w.uiWarning, watchRoots);
 		const specFile = writeSpecFile(spec, event.toolCallId);
 		if (!specFile) {
