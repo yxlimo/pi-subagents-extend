@@ -161,6 +161,26 @@ touched. If the package is missing the suite fails rather than skipping: a suite
 host is absent is a suite that never runs.
 
 
+## A real dispatch in this repo loads the published package, not your checkout
+
+The e2e suites above put the extension into the child explicitly: the fixture role md carries
+`subagentOnlyExtensions: <checkout>/src/index.ts` (`EXT` in `test/role/e2e-role.test.ts`), and the
+session runs with an isolated `PI_CODING_AGENT_DIR`, so nothing else can load. That is why they test
+the working tree.
+
+An ordinary dispatch you start by hand does not work that way. The child loads whatever is installed
+globally — `pi install npm:pi-subagents-extend` in `~/.pi/agent/settings.json` — so after editing
+`src/` a real subagent still runs the **published** version, and both the refusal texts and the
+behaviour you observe belong to that version. Verifying a checkout change therefore means one of:
+
+- run the e2e suite for the area (fixtures declare the checkout), or
+- temporarily point a role md's `subagentOnlyExtensions` at the checkout and dispatch, then put it
+  back, or
+- `pi install` the local package and accept that the checkout is what the machine runs.
+
+Reading a green refusal as proof of an unshipped change is the mistake this section exists to
+prevent.
+
 ## The mock model
 
 `test/mock-llm.ts` is a dependency-free OpenAI-compatible server: `/v1/models`, and
