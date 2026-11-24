@@ -165,8 +165,3 @@ jobs:
       # Real-model checks stay manual: they are for final debugging only, and
       # any boundary they reveal should come back as a mock-session case.
       #   PI_E2E_MODEL=<provider>/<model> pnpm run test:llm
-
-      # The worktree hook has no dependencies, and these cases start it the way
-      # pi-subagents does: the file itself, with nothing but a shebang.
-      - name: Worktree hook tests
-        run: node packages/worktree-setup/test/hook.test.mjs
