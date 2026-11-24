@@ -47,15 +47,6 @@ export interface BashRule {
 	 */
 	deny: string[];
 	/**
-	 * 启动前的依赖完整性闸门（默认开）：有 lockfile 却没有 node_modules/.bin 的目录，
-	 * 让 bash 直接失败并点名，而不是让第一条构建命令在沙箱里去装依赖、然后挂住。
-	 *
-	 * 数组是「这些目录不必装」的前缀清单：树里常年躺着没人安装的 lockfile
-	 * （fixtures/、vendored 的样例工程）时，只关掉整道闸门等于把真包也一起交出去。
-	 * `false` 才是整道闸门的开关。
-	 */
-	dependencyGate: string[] | false;
-	/**
 	 * 命令树停止消耗 CPU 超过这么多秒就杀掉（默认关）。
 	 *
 	 * 墙钟超时分不开「死锁」和「长编译」，累计 CPU 分得开：干活的树每次采样都在涨，卡住的
@@ -155,7 +146,6 @@ export function parseBashRule(raw: unknown): BashRule | undefined {
 		scratchPaths: cfg.scratchPaths === false ? false : stringList(cfg.scratchPaths),
 		gitExcludes: cfg.gitExcludes !== false,
 		deny: stringList(cfg.deny),
-		dependencyGate: cfg.dependencyGate === false ? false : stringList(cfg.dependencyGate),
 		// 未写 = 关。这条看门狗杀掉整棵进程树，默认打开会误杀刻意等待的命令（sleep、退避轮询），
 		// 而 helper 看不到输出（stdio 是继承的，不走管道），没法用「无输出」佐证。
 		cpuStallSeconds: stallSeconds(cfg.cpuStallSeconds),

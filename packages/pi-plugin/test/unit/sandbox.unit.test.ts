@@ -1,18 +1,18 @@
 // Offline unit tests for the sandbox layer's own decisions: write-grant
-// derivation (grants), the spec shape handed to the helper (spec), the
-// dependency gate (dependencies), and how a command is wrapped for the
-// helper (the announce/quiet prefix of wrapInSandbox).
+// derivation (grants), the spec shape handed to the helper (spec), the scan
+// order the toolchain detection depends on, and how a command is wrapped for
+// the helper (the announce/quiet prefix of wrapInSandbox).
 //
 // No handler, no childRun, no fake pi API: these cases call
-// sandboxWritableDirs / buildSpec / dependencyGateVerdict directly, so a bug in
+// sandboxWritableDirs / buildSpec directly, so a bug in
 // the module itself is caught here instead of looking identical to a wiring bug
 // through a full host environment.
 
 import assert from "node:assert/strict"
+import { sortByName } from "../../src/dependencies.ts"
 import { execFileSync } from "node:child_process"
 import { existsSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
-import { dependencyGateVerdict } from "../../src/dependencies.ts"
 import { sandboxWritableDirs } from "../../src/sandbox/grants.ts"
 import { QUIET_NETWORK_NOTICE_ENV, buildSpec, scratchDir, wrapInSandbox } from "../../src/sandbox/spec.ts"
 import { stateDir } from "../state-dir.ts"
@@ -164,55 +164,6 @@ const writeRule = (extra: Record<string, unknown> = {}): never =>
   console.log("  ok   the spec's tmp mount and its write grant are the same pinned directory")
 }
 
-// 有 lockfile 而没有安装凭据的目录：包管理器命令在跑起来之前就被点名拦下，
-// 而不是在沙箱里现装依赖然后挂死在锁上。装好了（node_modules/.bin 出现）就放行
-// —— 拦的是「没装好」，不是包管理器本身。
-{
-  const cwd = join(root, "gate")
-  mkdirSync(cwd, { recursive: true })
-  writeFileSync(join(cwd, "pnpm-lock.yaml"), "")
-  const rule = { dependencyGate: ["fixtures"] }
-  const refused = dependencyGateVerdict(rule, "pnpm install", "write", cwd)
-  assert.ok(typeof refused === "string", "a lockfile without node_modules/.bin refuses package-manager commands")
-  assert.ok(refused?.includes("node_modules/.bin"), "the refusal names the missing credential, not just 'denied'")
-  mkdirSync(join(cwd, "node_modules", ".bin"), { recursive: true })
-  assert.equal(dependencyGateVerdict(rule, "pnpm install", "write", cwd), undefined, "an installed tree passes the gate")
-  console.log("  ok   the dependency gate refuses pnpm until node_modules/.bin exists")
-}
-
-// false 是整道闸门的开关：关掉后同样的缺失也不再拦 —— 不是某条命令的白名单。
-{
-  const cwd = join(root, "gate-off")
-  mkdirSync(cwd, { recursive: true })
-  writeFileSync(join(cwd, "pnpm-lock.yaml"), "")
-  assert.equal(
-    dependencyGateVerdict({ dependencyGate: false }, "pnpm install", "write", cwd),
-    undefined,
-    "dependencyGate: false disables the gate entirely",
-  )
-  console.log("  ok   dependencyGate: false disables the gate even with a missing install")
-}
-
-// 忽略清单按目录边界生效：被点名的 fixtures 整个豁免（不拦 = undefined），
-// 而只差一个后缀的 fixtures-old 不能被 "fixtures" 连坐豁免 —— 前缀对齐错了，
-// 「我明明忽略了它」就变成调试题。
-{
-  const cwd = join(root, "ignore")
-  mkdirSync(join(cwd, "fixtures"), { recursive: true })
-  writeFileSync(join(cwd, "fixtures", "pnpm-lock.yaml"), "")
-  assert.equal(
-    dependencyGateVerdict({ dependencyGate: ["fixtures"] }, "pnpm install", "write", cwd),
-    undefined,
-    "a directory named in the ignore list is not treated as a violation",
-  )
-  assert.ok(dependencyGateVerdict({ dependencyGate: [] }, "pnpm install", "write", cwd)?.includes("fixtures"), "the same directory is flagged once it is not ignored")
-  const other = join(root, "boundary")
-  mkdirSync(join(other, "fixtures-old"), { recursive: true })
-  writeFileSync(join(other, "fixtures-old", "yarn.lock"), "")
-  const flagged = dependencyGateVerdict({ dependencyGate: ["fixtures"] }, "pnpm install", "write", other)
-  assert.ok(flagged?.includes("fixtures-old"), "ignoring fixtures does not exempt the sibling fixtures-old")
-  console.log("  ok   the ignore list exempts the named directory and honours directory boundaries")
-}
 
 // helper 的「网络已隔离」提示打到 stderr，每条离线命令都落进模型上下文一次。
 // 改法：wrapInSandbox 给 helper 调用加一个环境变量前缀，helper 读到就不再播报
@@ -247,4 +198,26 @@ const afterHelper = (wrapped: string): string => wrapped.slice(wrapped.indexOf("
   console.log("  ok   a fresh session's wiring starts unannounced")
 }
 
-console.log("  sandbox.unit: 12 cases passed")
+// 工具链探测按 readdir 的顺序取前 DETECT_MAX_ROOTS 个目录，而这个顺序由文件系统决定 ——
+// 这台机器上 tmpfs 给的是排序结果，ext4 的 dir_index、XFS、NFS 给的是哈希序，同一个仓库在
+// 两台机器上因此可能扫到不同的目录。磁盘上的顺序在本机造不出来，所以这里钉的是比较器本身。
+{
+  const shuffled = ["mike", "alpha", "zeta", "delta", "Bravo"].map((name) => ({ name }))
+  assert.deepEqual(
+    sortByName(shuffled).map((entry) => entry.name),
+    ["Bravo", "alpha", "delta", "mike", "zeta"],
+    "the scan sorts by code unit, so the same tree yields the same directories on any filesystem",
+  )
+
+  // 排序不能是 localeCompare：在 sv-SE 之类的 locale 下 "zeta" 会排到 "Bravo" 前面，
+  // 那样顺序又变成了环境依赖。
+  const pairs = ["zeta", "Bravo", "ä", "A"].map((name) => ({ name }))
+  assert.deepEqual(
+    sortByName(pairs).map((entry) => entry.name),
+    ["A", "Bravo", "zeta", "ä"],
+    "sorting is not locale-sensitive",
+  )
+  console.log("  ok   the toolchain scan sorts by code unit, not by readdir order or locale")
+}
+
+console.log("  sandbox.unit: 13 cases passed")

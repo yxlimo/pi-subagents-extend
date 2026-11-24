@@ -10,9 +10,8 @@ import { pathToFileURL } from "node:url";
 const here = new URL(".", import.meta.url);
 const src = (name: string): string => pathToFileURL(join(here.pathname, "..", "..", "src", name)).href;
 
-const { worktreeFromBlock, setupFromBlock, outputFromBlock, policyFromBlock, readExtendBlock, resolveRoleFromPrompt } =
+const { worktreeFromBlock, setupFromBlock, outputFromBlock, policyFromBlock, resolveRoleFromPrompt } =
   (await import(src("role-config.ts"))) as typeof import("../../src/role-config.ts");
-const { parseBashRule } = (await import(src("bash/rules.ts"))) as typeof import("../../src/bash/rules.ts");
 
 let passed = 0;
 function ok(label: string): void {
@@ -24,20 +23,6 @@ function temp(label: string): string {
   return join(tmpdir(), `pi-subagents-extend-p3-${label}-${process.pid}-${(Math.random() * 1e6) | 0}`);
 }
 
-function mdBlock(label: string, extendBody: string): Record<string, unknown> {
-  const dir = temp(`gate-${label}`);
-  const file = join(dir, "role.md");
-  try {
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(file, `---\nextend:\n${extendBody}\n---\nROLE BODY\n`);
-    const out = readExtendBlock(file);
-    assert.deepEqual(out.problems, []);
-    assert.ok(out.block, "the md must declare an extend block");
-    return out.block;
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-}
 
 console.log("pi-subagents-extend role phase 3a role-config module");
 
@@ -185,44 +170,5 @@ console.log("pi-subagents-extend role phase 3a role-config module");
   }
 }
 
-// 34. `dependencyGate: false` in an md reaches the policy and disables the gate.
-{
-  const out = policyFromBlock(mdBlock("gate-off", `  permissions:\n    bash:\n      allow: ["pnpm test"]\n      dependencyGate: false`));
-  assert.deepEqual(out.problems, []);
-  assert.deepEqual(out.policy?.bash, { allow: ["pnpm test"], dependencyGate: false });
-  assert.equal(parseBashRule(out.policy?.bash)?.dependencyGate, false);
-  ok("md dependencyGate: false disables the gate in the parsed policy");
-}
-
-// 35. A directory list in an md is kept as the ignore list, with dispatch-payload semantics.
-{
-  const out = policyFromBlock(mdBlock("gate-list", `  permissions:\n    bash:\n      allow: ["pnpm test"]\n      dependencyGate: ["fixtures", "examples/legacy"]`));
-  assert.deepEqual(out.problems, []);
-  assert.deepEqual(out.policy?.bash, { allow: ["pnpm test"], dependencyGate: ["fixtures", "examples/legacy"] });
-  assert.deepEqual(parseBashRule(out.policy?.bash)?.dependencyGate, ["fixtures", "examples/legacy"]);
-  ok("md dependencyGate directory list is preserved as the ignore list");
-}
-
-// 36. Bad md values are reported instead of being coerced into an enabled gate.
-{
-  for (const [label, value] of [["string", "fixtures"], ["number", "3"], ["boolean", true]] as const) {
-    const out = policyFromBlock(mdBlock(`gate-${label}`, `  permissions:\n    bash:\n      allow: ["pnpm test"]\n      dependencyGate: ${value}`));
-    assert.ok(
-      out.problems.some((p) => p.includes("permissions.bash.dependencyGate")),
-      `${label} must be reported as an invalid dependencyGate`,
-    );
-    assert.equal(out.policy?.bash?.dependencyGate, undefined);
-  }
-  ok("bad md dependencyGate values are reported and omitted");
-}
-
-// 37. An md that says nothing keeps the gate enabled by the existing default.
-{
-  const out = policyFromBlock(mdBlock("gate-default", `  permissions:\n    bash:\n      allow: ["pnpm test"]`));
-  assert.deepEqual(out.problems, []);
-  assert.equal(out.policy?.bash?.dependencyGate, undefined);
-  assert.deepEqual(parseBashRule(out.policy?.bash)?.dependencyGate, []);
-  ok("an md that omits dependencyGate keeps the gate enabled by default");
-}
 
 console.log(`\npi-subagents-extend role phase 3a role-config tests passed (${passed} cases)`);

@@ -51,7 +51,7 @@ import { wireSessionStart } from "./wiring/session-start.ts";
 import { createWiring, type ActivateOptions } from "./wiring/context.ts";
 import { bashBlocker, describePnpmStore, helperPath, sandboxWritableDirs } from "./sandbox/index.ts";
 export { dropHiddenGrants, findWorktreeRoot, privatisedDirs, resolveComparable } from "./paths/index.ts";
-export { dependencyScope, sortedEntries, sortByName } from "./dependencies.ts";
+export { sortedEntries, sortByName } from "./dependencies.ts";
 export { buildSpec, detectPnpmStore, describeHelper, helperCandidates, sandboxWritableDirs, wrapInSandbox, type HelperCapabilities } from "./sandbox/index.ts";
 export { nodeModulesWriteHint, wireDeliverable, wirePreExec, wireWorktree } from "./wiring/agent-start.ts";
 export { hasUnquotedShellControl } from "./wiring/tool-call/judge.ts";

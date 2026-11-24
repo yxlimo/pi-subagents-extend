@@ -11,7 +11,6 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { parse } from "yaml";
 
-import { stringList as bashStringList } from "./bash/rules.ts";
 import { mainRepoRoot } from "./deliverable.ts";
 export const BINDING_NAMESPACE = "pi-subagents-extend";
 export const BINDING_VERSION = 1;
@@ -24,7 +23,6 @@ export interface RoleBashPolicy {
 	deny?: string[];
 	writable?: boolean;
 	network?: boolean;
-	dependencyGate?: string[] | false;
 }
 
 /** md 基线能提供的字段，名字与现有 bindings 的策略字段对齐。 */
@@ -325,17 +323,6 @@ export function policyFromBlock(block: Record<string, unknown>): { policy?: Role
 			if (allow) converted.allow = allow;
 			const deny = bashList("deny");
 			if (deny) converted.deny = deny;
-			const dependencyGate = (() => {
-				const value = bash.dependencyGate;
-				if (value === undefined) return undefined;
-				if (value === false) return false;
-				if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
-					problems.push("permissions.bash.dependencyGate must be false or an array of strings");
-					return undefined;
-				}
-				return bashStringList(value);
-			})();
-			if (dependencyGate !== undefined) converted.dependencyGate = dependencyGate;
 			for (const key of ["writable", "network"] as const) {
 				const value = bash[key];
 				if (value === undefined) continue;

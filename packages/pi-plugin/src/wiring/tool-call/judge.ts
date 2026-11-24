@@ -8,7 +8,6 @@ import { STOP_NOTICE } from "../../probe.ts";
 import { shouldDefaultWorktree, WORKTREE_TOOLS } from "../../worktree-default.ts";
 import { agentMdDirs, BINDING_NAMESPACE, bindingKey, readExtendBlock, resolveAgentFile, worktreeFromBlock } from "../../role-config.ts";
 import { asObject, matches, type Policy } from "../../policy/index.ts";
-import { dependencyGateVerdict } from "../../dependencies.ts";
 import { expandPath, privatisedDirs, resolveComparable, underRoot } from "../../paths/index.ts";
 import { buildSpec, detectPnpmStore, describeHelper, dropSpecFile, helperPath, SANDBOX_DEVICE_PATHS, scratchDir, wrapInSandbox, writeSpecFile } from "../../sandbox/index.ts";
 import type { Wiring } from "../context.ts";
@@ -472,8 +471,8 @@ export const judgeToolCall = async ({
 			);
 		}
 		// 只读类命令的参数路径：沙箱读面是 `/`（工具链要读 /nix/store），所以路径引导放在插件层。
-		// 位置在元字符与注入型赋值之后、依赖闸门之前：前两条决定「这条命令能不能跑」，
-		// 闸门判的是环境，这一条只是把参数里的路径引回范围，三者互不重叠。
+		// 位置在元字符与注入型赋值之后：前两条决定「这条命令能不能跑」，这一条只是把参数里的
+		// 路径引回范围。
 		if (match.access === "read") {
 			const foreign = foreignBashPath(command, cwd, rule, w.policy);
 			if (foreign) {
@@ -496,11 +495,6 @@ export const judgeToolCall = async ({
 				);
 			}
 		}
-		// 依赖完整性闸门判的是环境，不是授权，子代理重试也不会变好，所以只拒不计。
-		// 它已不再是「先于一切」的那一条：上面的路径 nudge 排在它之前，而且计入撞权限预算 ——
-		// 路径出了工作树属于「授权与任务不匹配」，父代理放宽范围能解决。
-		const gate = dependencyGateVerdict(rule, command, match.access, cwd);
-		if (gate) return deny(gate);
 		const repeatEvent = w.probe?.noteBashStart(command, match.access, event.toolCallId);
 		if (repeatEvent) {
 			return repeatEvent.stop
