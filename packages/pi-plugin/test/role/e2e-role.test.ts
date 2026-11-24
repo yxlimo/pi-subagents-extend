@@ -36,7 +36,11 @@ function tempRoot(prefix: string): string {
  * 探针工程：in-scope.txt 在范围内，outside/out-of-scope.txt 在范围外。
  * 角色 md 只挂本扩展，正文带角色名以命中场景的子会话谓词。
  */
-function makeProject(role: string, md: string[]): string {
+function makeProject(
+  role: string,
+  md: string[],
+  options: { commit?: boolean } = {},
+): string {
   const root = tempRoot("pi-role-");
   // 交付物接线按「主检出锚点」找仓库根。探针工程落在共享 .test-state 里就在工作树
   // 仓库之内，git 会把锚点定位到真主检出，交付物就写进开发者的检出；git init 让
@@ -48,6 +52,19 @@ function makeProject(role: string, md: string[]): string {
   writeFileSync(join(root, "outside", "out-of-scope.txt"), "OUT-OF-SCOPE-LEAK\n");
   mkdirSync(join(root, ".pi", "agents"), { recursive: true });
   writeFileSync(join(root, ".pi", "agents", `${role}.md`), md.join("\n"));
+  if (options.commit) {
+    // 角色 md 故意不提交：`git worktree add` 只带 tracked 文件，工作树副本里就没有 md。
+    // 这条用例要证的是「工作树里找不到 md 时，仍能从主检出定位到它」——md 若跟着进了
+    // 工作树，旧实现（只在 cwd 向上走）也会通过，用例就钉不住修复。
+    // 其余文件必须提交：没有 HEAD 时 pi-subagents 建不出工作树。
+    mkdirSync(join(root, ".git", "info"), { recursive: true });
+    writeFileSync(join(root, ".git", "info", "exclude"), `.pi/agents/${role}.md\n`);
+    const git = (...args: string[]): void => {
+      execFileSync("git", args, { cwd: root, stdio: "ignore" });
+    };
+    git("add", "-A");
+    git("-c", "user.email=probe@example.invalid", "-c", "user.name=probe", "commit", "-q", "-m", "probe");
+  }
   return root;
 }
 
@@ -79,6 +96,8 @@ interface CaseOutcome {
   subagent: { tool?: string; text: string };
   mock: MockLlm;
   files: Record<string, { exists: boolean; content?: string }>;
+  /** 探针工程根目录：工作树用例要证明子会话的 cwd 不是它。 */
+  project: string;
 }
 
 /** 会话的系统提示文本；mock 的请求体里只有消息数组，没有端口以外的元数据。 */
@@ -101,11 +120,12 @@ async function runCase(
   role: string,
   md: string[],
   probes: string[] = [],
+  options: { commit?: boolean } = {},
 ): Promise<CaseOutcome> {
   const mock = await startMockLlmFromFixture(
     loadMockFixture(join(FIXTURES, fixture)),
   );
-  const project = makeProject(role, md);
+  const project = makeProject(role, md, options);
   const agentDir = makeAgentDir(mock.url);
   let run: HostRun | undefined;
   try {
@@ -130,7 +150,7 @@ async function runCase(
         ? { exists: true, content: readFileSync(abs, "utf8") }
         : { exists: false };
     }
-    return { run, subagent, mock, files };
+    return { run, subagent, mock, files, project };
   } finally {
     if (run) await run.stop();
     await mock.stop();
@@ -304,4 +324,77 @@ const tailOf = (run: HostRun): string => `stderr: ${run.stderr.slice(-800)}`;
   console.log("  ok   role md preExec：标记在首次工具调用前落盘，且只跑一次");
 }
 
-console.log("role md e2e tests passed (3 cases)");
+// 4. 工作树里的子代理仍受主检出里的角色 md 约束：pwd 证明确实换了目录，
+//    越界读被拒且点名 md，范围内读照常回流。
+{
+  const { run, subagent, project } = await runCase(
+    "role-worktree.yaml",
+    "Go.",
+    "role-worktree",
+    [
+      "---",
+      "name: role-worktree",
+      "description: Role md from the main checkout in a worktree",
+      "inheritSkills: false",
+      "inheritProjectContext: true",
+      "tools: read, write, bash",
+      `subagentOnlyExtensions: "${EXT}"`,
+      "extend:",
+      "  permissions:",
+      "    scope:",
+      "      - in-scope.txt",
+      "    bash:",
+      "      allow:",
+      "        - pwd",
+      "---",
+      "",
+      "You are role-worktree: quote the three tool results verbatim.",
+      "",
+    ],
+    [],
+    { commit: true },
+  );
+  const tail = tailOf(run);
+  assert.ok(
+    subagent.text.includes("IN-SCOPE-OK"),
+    `positive control: the worktree child must still be allowed to read in-scope.txt and carry its content back. ${HEAD(subagent.text)} ${tail}`,
+  );
+  assert.ok(
+    subagent.text.includes("outside the read scope"),
+    `the role md must still refuse the worktree child's out-of-scope read. ${HEAD(subagent.text)} ${tail}`,
+  );
+  assert.ok(
+    subagent.text.includes("role md ") &&
+      subagent.text.includes(join(".pi", "agents", "role-worktree.md")),
+    `the refusal must name the role md file found through the main checkout. ${HEAD(subagent.text)} ${tail}`,
+  );
+  assert.equal(
+    subagent.text.includes("OUT-OF-SCOPE-LEAK"),
+    false,
+    `a refused read must not leak the file's content. ${HEAD(subagent.text)} ${tail}`,
+  );
+  // 子会话的 pwd 输出由 {{toolResults}} 回流到 subagent 文本。工作树没建出来时这里必须
+  // 显式失败：既不能只靠拒绝文案通过，也不能接受探针工程根目录当「工作树」。
+  const pwdLines = subagent.text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.includes("pi-worktree-") && line.startsWith("/"));
+  assert.ok(
+    pwdLines.length > 0,
+    `the child's pwd output must show a linked-worktree path; the worktree was not created. ${HEAD(subagent.text)} ${tail}`,
+  );
+  assert.ok(
+    pwdLines.some((line) => line !== project && !line.startsWith(`${project}/`)),
+    `the child must run in a worktree, not in the probe project root ${project}. pwd showed: ${pwdLines.join(" | ")} ${tail}`,
+  );
+  // 工作树副本里没有角色 md：否则这条用例在「向上找到子目录里的 md」的旧实现下也会过，
+  // 就钉不住主检出锚点这条修复路径。
+  assert.equal(
+    existsSync(join(pwdLines[0], ".pi", "agents", "role-worktree.md")),
+    false,
+    `the worktree copy must not contain the role md; otherwise this case passes without the main-checkout lookup. ${tail}`,
+  );
+  console.log(`  ok   role md 工作树：子会话 cwd=${pwdLines[0]}，越界读被拒且点名主检出角色 md`);
+}
+
+console.log("role md e2e tests passed (4 cases)");

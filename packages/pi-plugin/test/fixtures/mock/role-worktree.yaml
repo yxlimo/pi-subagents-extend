@@ -1,0 +1,41 @@
+# Role md reached through the main checkout of a linked worktree.
+# Same shape as role-scope.yaml, but the dispatch asks for a worktree: the child
+# cwd is under ~/.pi/worktrees and the role md is NOT in that copy, so only
+# resolving it through the main checkout can constrain the child.
+# pwd proves where the child actually ran; the reads prove the scope came from
+# the role md and that a refuse-everything binding would not pass.
+name: role-worktree
+sessions:
+  - name: parent
+    when:
+      systemPromptContains: "a coding agent harness"
+    turns:
+      - reply:
+          calls:
+            - name: subagent
+              args:
+                agent: role-worktree
+                task: >-
+                  Run pwd, then read outside/out-of-scope.txt and in-scope.txt;
+                  quote all three results verbatim.
+                async: false
+                worktree: true
+      - reply:
+          text: "Parent finished."
+  - name: child
+    when:
+      systemPromptContains: "role-worktree"
+    turns:
+      - reply:
+          calls:
+            - name: bash
+              args:
+                command: pwd
+            - name: read
+              args:
+                path: outside/out-of-scope.txt
+            - name: read
+              args:
+                path: in-scope.txt
+      - reply:
+          text: "{{toolResults}}"
