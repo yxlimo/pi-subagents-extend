@@ -80,8 +80,9 @@ individually because they are not yet grouped under one directory.
 
 ## What this area has been wrong about before
 
-- Identity is not guaranteed: `systemPromptMode: replace` drops the `<active_agent>` tag, and
-  a role whose identity is not resolved has **no** constraints — that is fail-open, not
+- Identity is not guaranteed: pi-subagents prepends the `<active_agent>` tag in both prompt modes,
+  so `replace` does not lose it — but a prompt built without the tag falls back to matching the md
+  body, and a role whose identity is not resolved has **no** constraints — that is fail-open, not
   fail-closed. The body-match fallback exists for exactly that case, and it must resolve only
   when exactly one md matches. Never guess between two.
 - `setup` and `output` are role contract, not dispatch input. A dispatch that supplies them

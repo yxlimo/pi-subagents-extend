@@ -5,8 +5,9 @@ acceptanceRole: writer
 thinking: high
 inheritProjectContext: true
 inheritSkills: false
-# append, not replace: replace drops the <active_agent> tag, and this role's limits come
-# solely from the extend block below, which is only read once the role is identified.
+# append: the child keeps the harness system prompt and gets this body on top, which is what a
+# role wants. replace would make this body the whole system prompt. Either way pi-subagents
+# prepends the <active_agent> tag, so the role is identified in both.
 systemPromptMode: append
 extend:
   # A fresh worktree has no helper binary: packages/pi-plugin/bin is gitignored, and

@@ -50,7 +50,7 @@ this repository has ten working examples —
 ---
 name: worker
 description: Implements a task within the given scope
-systemPromptMode: append  # replace drops the <active_agent> tag the extension reads
+systemPromptMode: append  # keeps the harness prompt; replace would make this body the whole prompt
 extend:
   permissions:
     scope: ["src/auth/**"]
