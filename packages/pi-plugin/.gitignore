@@ -3,3 +3,4 @@ bin/
 # prepack 从仓库根拷进来，不入版本库（同 pi-wake）
 README.md
 LICENSE
+scripts/

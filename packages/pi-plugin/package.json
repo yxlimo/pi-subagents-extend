@@ -37,7 +37,7 @@
     "test:mock": "node test/mock-session.test.ts",
     "test:llm": "node test/e2e.test.ts",
     "prepublishOnly": "pnpm run build",
-    "prepack": "cp -f ../../README.md ../../LICENSE .",
+    "prepack": "cp -f ../../README.md ../../LICENSE . && mkdir -p scripts && cp -f ../../scripts/check-role-grants.mjs scripts/",
     "lint": "eslint ."
   },
   "peerDependencies": {
@@ -57,9 +57,13 @@
   "files": [
     "src",
     "skills",
-    "bin"
+    "bin",
+    "scripts"
   ],
   "dependencies": {
     "yaml": "^2.9.1"
+  },
+  "bin": {
+    "pi-subagents-extend-check": "./scripts/check-role-grants.mjs"
   }
 }

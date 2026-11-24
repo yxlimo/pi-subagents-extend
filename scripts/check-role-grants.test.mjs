@@ -3,10 +3,12 @@
 // an interior comment used to truncate every list, and a loader path pointing at a deleted file was
 // reported by nothing at all.
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
 	allowEntries,
@@ -303,5 +305,22 @@ test("没有 mise.toml 时只跳过任务存在性，不跳过 allowlist 检查"
 		assert.match(problems[0], /but bash.allow does not/);
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
+	}
+});
+
+test("通过 node_modules/.bin 的符号链接调用也要真的跑（回归：入口判据比原始路径，静默退出 0）", () => {
+	// 包把检查器导成 bin，消费仓在 CI 里跑的就是那个符号链接。entry 是链接、import.meta.url 是真实
+	// 路径，两者不相等时主逻辑不执行：退出码 0、零输出，在 CI 里读起来跟「配置没问题」一模一样。
+	const dir = withRoleDirs({ "coder.md": md({ write: "[.]" }) });
+	const link = mkdtempSync(path.join(os.tmpdir(), "role-link-"));
+	try {
+		const target = symlinkSync(fileURLToPath(new URL("./check-role-grants.mjs", import.meta.url)), path.join(link, "check"));
+		void target;
+		const out = spawnSync(process.execPath, [path.join(link, "check"), dir], { encoding: "utf8" });
+		assert.equal(out.status, 0, out.stderr);
+		assert.match(out.stdout, /role config: every write grant is reachable/);
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+		rmSync(link, { recursive: true, force: true });
 	}
 });

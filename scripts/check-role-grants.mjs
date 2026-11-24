@@ -18,7 +18,7 @@
 // instead of taking a dependency on a parser. Every list reader tolerates `# comments` and blank lines
 // between entries; matching "the first run of `- ` lines" stops at the first comment, which reported
 // working configs as broken three separate times.
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -165,8 +165,15 @@ const exists = (path) => {
 /**
  * This package's own `src/`, so a loader path installed on somebody's machine can still be judged by
  * the file list we ship: `<prefix>/pi-subagents-extend/src/index.ts` has to name a file here.
+ *
+ * Two layouts: in a checkout the script sits at `<repo>/scripts/`, in the published package at
+ * `<pkg>/scripts/` next to `src/`. Both are resolved by looking, not by assuming, because a consumer
+ * repo runs the installed copy and its guesses about `packages/pi-plugin` would otherwise be wrong.
  */
-const ownSrc = resolve(dirname(fileURLToPath(import.meta.url)), "..", "packages", "pi-plugin", "src");
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+const ownSrc = [resolve(scriptDir, "..", "src"), resolve(scriptDir, "..", "packages", "pi-plugin", "src")].find(
+	(candidate) => exists(join(candidate, "index.ts")),
+);
 
 /**
  * The `src/<rest>` tail of a loader path that points into this package, or undefined when the path
@@ -227,7 +234,11 @@ export function checkRoleDirs(dir, { miseToml, root = resolve(dir, "..", "..") }
 			// A path that names this package has to reach a file it ships: `src/` is what the tarball
 			// carries, so anything else (a deleted `.pi/agent-profiles/…` loader, a `dist/` guess) loads
 			// nothing at all whoever runs it.
-			if (entry.includes("pi-subagents-extend")) {
+			// A path that names this package has to reach a file it ships: `src/` is what the tarball
+			// carries, so anything else (a deleted `.pi/agent-profiles/…` loader, a `dist/` guess) loads
+			// nothing at all whoever runs it. Skipped only if this script cannot find its own src, which
+			// would mean the package was unpacked in a shape nothing else understands either.
+			if (entry.includes("pi-subagents-extend") && ownSrc !== undefined) {
 				const tail = shippedLoaderTail(entry);
 				if (tail === undefined) {
 					problems.push(
@@ -339,4 +350,17 @@ function main() {
 	console.log("\nrole config: every write grant is reachable, every deny list complete");
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
+// Runs when invoked as a program, including through the `node_modules/.bin` symlink this package ships.
+// Comparing the paths directly fails there: node resolves the main module to its real path, so a symlink
+// entry never matches its own target — the check would exit 0 having printed nothing, which reads as
+// "config is fine" in CI.
+const invokedDirectly = (() => {
+	const entry = process.argv[1];
+	if (!entry) return false;
+	try {
+		return realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url));
+	} catch {
+		return false;
+	}
+})();
+if (invokedDirectly) main();
