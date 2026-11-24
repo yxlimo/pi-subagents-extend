@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url"
 import { injectMainOnly, stripMarkedSections, unbalancedWarning } from "../../src/context-scope.ts"
 import { ensureDeliverableLink, mainRepoRoot } from "../../src/deliverable.ts"
 import { extractCallConfig } from "../../src/policy/payload.ts"
-import { BINDING_NAMESPACE, BINDING_VERSION, bindingKey, outputFromBlock, policyFromBlock, readExtendBlock, setupFromBlock, worktreeFromBlock } from "../../src/role-config.ts"
+import { agentMdDirs, BINDING_NAMESPACE, BINDING_VERSION, bindingKey, outputFromBlock, policyFromBlock, readExtendBlock, resolveAgentFile, setupFromBlock, worktreeFromBlock } from "../../src/role-config.ts"
 import { wireDeliverable } from "../../src/wiring/agent-start.ts"
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -189,6 +189,35 @@ console.log("pi-subagents-extend role/deliverable/context unit")
 
   assert.deepEqual(mainRepoRoot(worktree), { root: realpathSync.native(main), via: "common-dir" })
   ok("a linked worktree's gitfile resolves the main checkout through commondir")
+}
+
+// 7b. A linked worktree finds the role md of the project it belongs to, not of the disk it sits on.
+// Regression: worktrees live under ~/.pi/worktrees, so the upward walk from the child's cwd never
+// reaches the workspace — a dispatched child got no policy at all and `git commit` simply succeeded.
+{
+  const caseRoot = join(root, "md-linked")
+  const main = join(caseRoot, "main")
+  const worktree = join(caseRoot, "worktrees", "pi-worktree-abc-0")
+  const gitDir = join(main, ".git", "worktrees", "topic")
+  mkdirSync(gitDir, { recursive: true })
+  writeFileSync(join(gitDir, "commondir"), "../..\n")
+  writeFileSync(join(gitDir, "HEAD"), "ref: refs/heads/topic\n")
+  mkdirSync(worktree, { recursive: true })
+  writeFileSync(join(worktree, ".git"), `gitdir: ${gitDir}\n`)
+  mkdirSync(join(main, ".pi", "agents"), { recursive: true })
+  writeFileSync(join(main, ".pi", "agents", "probe-role.md"), "---\nextend: {}\n---\nprobe\n")
+  const home = join(caseRoot, "home")
+  mkdirSync(home, { recursive: true })
+
+  assert.ok(
+    agentMdDirs(worktree, home).includes(join(realpathSync.native(main), ".pi", "agents")),
+    "the main checkout's .pi/agents is searched from inside a linked worktree",
+  )
+  assert.equal(
+    resolveAgentFile("probe-role", worktree, home),
+    join(realpathSync.native(main), ".pi", "agents", "probe-role.md"),
+  )
+  ok("a linked worktree resolves the role md of the project it belongs to")
 }
 
 // 8. A standalone gitfile is the next tier, ahead of cwd.

@@ -12,6 +12,7 @@ import { dirname, join, resolve } from "node:path";
 import { parse } from "yaml";
 
 import { stringList as bashStringList } from "./bash/rules.ts";
+import { mainRepoRoot } from "./deliverable.ts";
 export const BINDING_NAMESPACE = "pi-subagents-extend";
 export const BINDING_VERSION = 1;
 
@@ -90,18 +91,41 @@ export function parseRoleName(systemPrompt: string): string | null {
 const MAX_MD_PARENT_LEVELS = 8;
 
 /**
- * md 的查找目录：从会话 cwd 起逐级向上，每级先看 .pi/agents 再看 .agents，
- * 最后才是用户目录的两级。向上封顶 8 层，异常深的路径也不至于无限扫。
+ * 链接工作树属于某个主检出，而角色 md 是「项目」的配置，不是这块磁盘位置的配置：工作树建在
+ * ~/.pi/worktrees 下时，从它向上找不到工作目录的 .pi，子代理于是拿不到任何策略 —— 实测就是
+ * 这么 fail-open 的（子代理在工作树里 `git commit --allow-empty` 直接成功）。
+ *
+ * 主检出锚点不在这里重算：deliverable.ts 的 mainRepoRoot 已经回答过同一个问题（gitfile 的
+ * commondir、git worktree list、子目录情形都在它里面，且有测试）。这里只在锚点确实不是当前
+ * 目录时补一段向上链，普通检出下与改动前完全一致。
+ */
+function mainCheckoutRoots(cwd: string): string[] {
+	const { root } = mainRepoRoot(cwd);
+	return root && root !== resolve(cwd) ? [root] : [];
+}
+
+/**
+ * md 的查找目录：从会话 cwd 起逐级向上，每级先看 .pi/agents 再看 .agents；链接工作树
+ * 再按主检出向上走一遍；最后才是用户目录的两级。向上封顶 8 层，异常深的路径也不至于无限扫。
  */
 export function agentMdDirs(cwd: string, home: string): string[] {
 	const dirs: string[] = [];
-	let current = resolve(cwd);
-	for (let level = 0; level < MAX_MD_PARENT_LEVELS; level += 1) {
-		dirs.push(join(current, ".pi", "agents"), join(current, ".agents"));
-		const parent = dirname(current);
-		if (parent === current) break;
-		current = parent;
-	}
+	const seen = new Set<string>();
+	const walk = (from: string) => {
+		let current = resolve(from);
+		for (let level = 0; level < MAX_MD_PARENT_LEVELS; level += 1) {
+			for (const dir of [join(current, ".pi", "agents"), join(current, ".agents")]) {
+				if (seen.has(dir)) continue;
+				seen.add(dir);
+				dirs.push(dir);
+			}
+			const parent = dirname(current);
+			if (parent === current) break;
+			current = parent;
+		}
+	};
+	walk(cwd);
+	for (const root of mainCheckoutRoots(cwd)) walk(root);
 	dirs.push(join(home, ".pi", "agent", "agents"), join(home, ".agents"));
 	return dirs;
 }
