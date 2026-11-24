@@ -38,13 +38,13 @@ before it — no module imports `index.ts`, which is what keeps the layers one-w
 | `bash/index.ts` | the barrel every caller imports: allow-list rules, merge semantics, the single command matcher |
 | `bash/tokens.ts` | quote-aware tokenizing, command segments, path candidates |
 | `bash/env.ts` | leading environment assignments; refuses a `PATH`/`IFS`/`LD_PRELOAD` redefinition |
-| `bash/programs.ts` | the read/write program tables, wrapper peeling, package-manager subcommand rules |
+| `bash/programs.ts` | wrapper peeling and package-manager directory flags for the entry-reachability hints |
 | `bash/network.ts` | which commands need a round trip, with the local-query carve-out |
-| `bash/rules.ts` | rule parsing and merge, `classifyCommand`, the entry listing |
+| `bash/rules.ts` | rule parsing and merge, the allowlist and deny entry listings |
 | `bash/unreachable.ts` | the manifest walk that reports an entry no invocation can reach |
 | `policy.ts` | payload parsing, the merge semantics of role md and dispatch, globs |
 | `paths.ts` | real paths, working-tree versus scope comparison, hidden-grant reporting |
-| `dependencies.ts` | lockfile discovery, the dependency gate, scratch-directory probing |
+| `dependencies.ts` | toolchain artefact-directory probing |
 | `budgets.ts` | the two refusal counters and their defaults |
 | `notices.ts` | what the extension says about a grant: unreachable entries, hidden grants, untracked role mds |
 | `sandbox.ts` | the helper process, the granted path set, the spec written per call, command wrapping |
@@ -130,9 +130,9 @@ name: writer
 extend:
   permissions:
     scope: ["."]
+    write: ["."]
     bash:
       allow: ["git status", "git diff", "pnpm test"]
-      writable: true
       deny: ["git stash", "git checkout", "git reset"]
 ---
 ```
@@ -161,8 +161,8 @@ Rules per field — a field the dispatch names wins, a field it omits is filled 
   default; a union would widen file access on every dispatch and would make "narrower than the role"
   inexpressible.
 - **the call wins** — the remaining scalars and switches (`readOnly`, `maxReads`, `maxDenies`,
-  `maxWriteDenies`, `tools`, `probe`, `bash.writable`, `bash.network`, `bash.dependencyGate`,
-  `bash.cpuStallSeconds`, `bash.scratchPaths`); `bash.env` merges per variable name.
+  `maxWriteDenies`, `tools`, `probe`, `bash.network`, `bash.cpuStallSeconds`,
+  `bash.scratchPaths`); `bash.env` merges per variable name.
 - **`readOnly: true` with no `writeScope` in the same layer** empties the merged `writeScope`. Without
   that, a role md's `writeScope` (the `review` role's report directory is the shape) cancelled a
   dispatch's read-only intent, because the merged config then had an "explicit" write scope and
@@ -192,7 +192,7 @@ reach the system prompt of whichever session loads the extension and nothing has
 
 | Skill | Contents |
 | --- | --- |
-| `pi-subagents-extend` | file scope, the bash columns and `re:` patterns, the sandbox, worktree setup, role defaults, a call template |
+| `pi-subagents-extend` | file scope, the bash allowlist and `re:` patterns, the sandbox, worktree setup, role defaults, a call template |
 | `pi-subagents-extend-probes` | the probe criteria, the denial budget, warn and stop semantics, how to read a report after a stop |
 | `pi-subagents-extend-context` | the markers, `.pi/main-only.md`, the three entry points |
 
@@ -212,14 +212,15 @@ register them.
   src/link/evil` where `src/link -> /elsewhere` was allowed and landed outside.
 - Reads are not confined inside the sandbox: a test suite must read the tree, its `node_modules` and
   its configuration, and the toolchain lives in `/nix/store`. Read confinement stays with `read`,
-  `grep` and `find`, which are judged by `scope`. One nudge runs on top of the sandbox, for read-class
-  commands only: a path argument that contains a slash and nothing but path characters is resolved
+  `grep` and `find`, which are judged by `scope`. One nudge runs on top of the sandbox, for every
+  allowed command: a path argument that contains a slash and nothing but path characters is resolved
   (symlinks by their real target) and refused when it lands outside the **working tree** — the directory
   the command runs in, not the read scope — naming the path and saying what the way out is — see
   [usage](usage.md#what-bash-may-read). The toolchain directories are not exempt: the program being run
   is, because that is the tool rather than a file of the task's. It is a nudge, so it is loose by
   construction: quoted arguments, `$VAR`, globs, URLs and bare words are skipped, and the sandbox still
   reads anything the command asks for.
+  Paths covered by a write grant (`writablePaths`, absolute write scopes) are exempt, so those grants stay usable from bash.
 - The extension intercepts at `tool_call`. A subagent inherits the parent's environment and
   credentials, so this guards against overstepping, not against malice.
 - Nested subagents do not inherit bindings: an unscoped nested subagent runs without this

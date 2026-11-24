@@ -83,7 +83,7 @@ done
 """
 
 [tasks."test:sandbox"]
-description = "The sandbox itself: grants, Landlock reality, dependency gate"
+description = "The sandbox itself: grants, Landlock reality, spec and observed writes"
 depends = ["setup:helper"]
 run = """
 for f in packages/pi-plugin/test/sandbox/*.test.ts; do

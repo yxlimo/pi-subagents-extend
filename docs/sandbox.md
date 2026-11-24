@@ -42,12 +42,13 @@ The command runs under a supervising PID 1 (see below), never as PID 1 itself.
 
 A Landlock ruleset. `/` stays readable and executable, so `cat` can read outside the tree as
 noted in [architecture](architecture.md#boundaries). That is deliberate, and the nudge that comes with
-it is separate from the ruleset: before a read-class command starts, the extension checks its path
+it is separate from the ruleset: before any allowed command starts, the extension checks its path
 arguments against the **working tree** — the directory the command runs in, not the read scope (see
 [usage](usage.md#what-bash-may-read)) — and a command that gets past that nudge can still read anything.
+The nudge runs on every command; paths covered by a write grant (`writablePaths` or an absolute write scope) are exempt, so those grants remain usable from bash.
 Only these are writable:
 
-- the paths the write scope **covers**, when `bash.writable` is set. Landlock can only grant, never
+- the paths the write scope **covers**, when the task has a write grant. Landlock can only grant, never
 exclude, and a rule on a directory grants everything beneath it — so a scope entry opens a directory
 only when it covers a whole subtree (`dir`, `dir/**`). A file-level entry such as `src/auth/*.ts` is
 expanded into the files it actually matches, each granted as a file: the parent directory stays
@@ -75,6 +76,7 @@ that directory has to be granted whole:
   described under [Namespaces](#namespaces) — granting a directory that is *not* mounted over would
   be a host write, not a sandbox one, which is why the former is now named in the spec's `tmp`
 
+A write grant is a directory configuration, not a switch: a task has one when its write scope (the write scope, or `scope` when none is given), its `writablePaths`, or its deliverable file is named. The grant is judged from the declaration, not from what exists today — a write scope that names a file the task is about to create still gives the sandbox its git and artefact directories. With all three empty the sandbox gets no writable path at all, not even `.git` or `node_modules`.
 A grant *below* one of those mounted directories cannot take effect: the tmpfs is mounted empty, so
 the path the rule would attach to is gone, and the write would never reach the host file the grant
 was meant for. The helper refuses that spec before the command starts, with exit 77, naming the grant
@@ -102,7 +104,7 @@ A write outside them fails with `EACCES`. Landlock rules attach to the resolved 
 symlink inside a granted directory that points outside stays read-only: the rule follows the
 target. `node_modules` is the one deliberate exception, realpath'd before being granted.
 
-A read-only sandbox gets none of the git or `node_modules` grants — silently widening the main
+A task with no write configuration gets none of the git or `node_modules` grants — silently widening the main
 repository's `.git` is worse than a failing git command.
 
 The kernel requirement is **Landlock ABI 7 (Linux 6.15 or later)**. Below that the extension does

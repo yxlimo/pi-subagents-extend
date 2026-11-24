@@ -127,7 +127,8 @@ writes and network access, not reads, because running a test suite needs to read
 
 This is not a sandbox against malicious code. A subagent inherits the parent's environment and
 credentials, so it guards against a subagent overstepping its task, not against an adversary;
-genuinely untrusted input needs container-level isolation. One concrete limit follows from Landlock:
+genuinely untrusted input needs container-level isolation. A task with no write configuration gets no
+writable path at all. When it does have a write grant, one concrete limit follows from Landlock:
 in a **plain checkout** the sandbox is granted `.git` whole, because the index and `HEAD` lock files
 live there and a directory cannot be granted without its `hooks/` and `config` — so a subagent
 working directly in a checkout can plant a hook the parent would later run. In a linked worktree it

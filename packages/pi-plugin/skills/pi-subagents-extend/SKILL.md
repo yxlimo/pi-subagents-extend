@@ -59,7 +59,6 @@ extend:
       writeDeny: 2
     bash:
       allow: ["git status", "git diff", "mise run typecheck", "mise run test:router:session-balance"]
-      writable: true
       deny:
         - git commit
         - git push
@@ -103,10 +102,8 @@ Everything lives under `extend.permissions`, except `worktree` which is a siblin
 | `budgets.deny` | how many widen-the-grant refusals before the session is stopped | `5` (5th warns, 6th stops) | only counts refusals a wider grant could fix — a wrong argument does not count |
 | `budgets.writeDeny` | same for write refusals | `2` | keep it low: a role that keeps trying to write outside its area is not going to succeed |
 | `bash.allow` | the commands it may run | empty = bash refused | matching rules are in [Step 4](#step-4-bash-what-matches-and-what-the-sandbox-stops-anyway) |
-| `bash.writable` | whether commands may write at all | `false` | a test run that writes artefacts is refused at the gate without it |
 | `bash.deny` | commands refused no matter what | empty | a union floor: no dispatch can lift an entry, and it has no cross-file reuse |
 | `bash.network` | outbound network for commands | `false` | the sandbox cuts packets; a command that dials out hangs rather than failing fast |
-| `bash.dependencyGate` | refuse a command whose dependency is not installed | on | only reads the command line — see [Step 4](#step-4-bash-what-matches-and-what-the-sandbox-stops-anyway) |
 | `worktree` | the dispatch default for `worktree` | not set = the dispatch decides | fills a missing value only; an explicit `false` in the dispatch wins |
 
 `scope` may be omitted for a role that does not know a task's paths: file access is then refused entirely and the bash allowlist still applies, so a forgotten binding fails loudly on the first read rather than silently permitting everything.
@@ -123,14 +120,9 @@ A role md that exists but cannot be parsed, or whose `extend` block is invalid, 
 - a leading `VAR=value` is stripped before the comparison, so an allowed program cannot be hidden behind an assignment;
 - `re:<pattern>` is a full-match regular expression when the entry starts with `re:` — that is how one entry covers a family: `re:mise run test:(policy|paths|bash)`.
 
-**A program the judge does not know is classified read.** `mise`, `make`, `just`, a project script — none of them are in the program tables, so `mise run …` is judged a read:
-
-- the `bash.writable: false` gate does **not** pre-refuse it (that gate exists for known writers such as package managers);
+**`bash.allow` decides whether a command may run, not what it may write.** There is no command read/write classification: `mise`, `make`, `just`, project scripts and package managers all run under the same Landlock rules. A task with a write grant gets the write scope, git's own directories, `node_modules`, the detected artefact directories and `bash.writablePaths` writable. With no write configuration the sandbox gets no writable path at all. A write outside that set is refused by the kernel while the command runs, and the failed result says `[sandbox] <path> is outside the writes the parent granted (<granted paths>) — a permission, not a filesystem fault`, pointing at `writablePaths` or a wider write scope.
 - it must still be in `bash.allow`, or it is refused;
-- what it actually writes is stopped by Landlock at runtime, not at the gate: with `writable: false` the only writable places left are the sandbox's own scratch directory and a private `/tmp`, so a write anywhere real hits `EACCES` and the tool result says so;
 - mise's own state directory is pointed inside the sandbox (when the worktree has a `mise.toml`), so a task that writes state does not write it to the host — and the tool install directory is not granted either, so `mise` may run the tasks but cannot install a tool. Install tools from the parent session.
-
-**The dependency gate reads the command line only.** It applies to package managers (`pnpm`, `npm`, `yarn`, `bun`) and to commands classified as writes. A `mise run test` is neither, so the gate never inspects it and never reads the task body — a task that runs `pnpm install` is not gated, and a task that needs a dependency missing from the worktree fails with that dependency's own error rather than with a gate message. If a role needs dependency installation, say so in the role body and grant the store path, instead of assuming the gate will explain it.
 
 **Network is cut structurally.** Only listed network tools are refused up front (a refusal is friendlier than a hang); anything else that dials out — including a `mise` task — has its packets dropped inside the namespace, so it hangs or times out rather than telling you it was the network.
 
@@ -142,7 +134,7 @@ Policy that is loaded but not applied looks exactly like policy that works, unti
 
 1. **Out of scope is refused.** `read` a path outside `scope`; the refusal must name this role's md path.
 2. **In scope is allowed.** `read` a path inside `scope` and report one line of it — otherwise check 1 also passes when *everything* is refused.
-3. **The gates run.** `mise run <task>` (or whatever `bash.allow` names) returns real output, not a `bash.writable` refusal and not a missing-dependency error.
+3. **The gates run.** `mise run <task>` (or whatever `bash.allow` names) returns real output. Dependencies are prepared at dispatch: `setup.preExec` runs `~/.pi/extensions/.pi/scripts/worktree-prepare.sh`, which links `packages/pi-plugin/node_modules` and copies the helper into the worktree.
 
 Do the same once with `async: false` if you dispatch foreground children — that is the shape where the extension is missing entirely, and nothing in the parent session shows it.
 
@@ -156,11 +148,9 @@ Per file: add `extend.permissions`, delete `tools:`, switch `systemPromptMode` t
 | --- | --- | --- |
 | The child runs out-of-scope commands as if nothing were configured | foreground dispatch with no `subagentOnlyExtensions`, or the path names a copy that does not exist | check 1 in [Step 5](#step-5-prove-the-role-is-in-force); declare the installed entry |
 | Every bash call refused, refusal quotes a wrapped command you never wrote | two copies of this extension in one session; the second judged the first's sandbox wrapper | quote the refusal; with a current build activation happens once per session, so a second copy is inert — if you see this, the loaded copy is older than the declared one |
-| Refusal mentions `bash.writable: false` | the command writes and the role grants no writes | `writable: true`, or have the role deliver a report instead |
-| Refusal names a manifest or a missing dependency | dependency gate, before the command ran | install the dependency in the worktree, or run the step in the parent |
 | `declares tools: …,edit,… but an extension … replaced the tools` | `tools:` pinned a name this host does not register | delete `tools:` |
 | Two role mds are candidates / no role selected | two md bodies share their opening text, and the tag was not matched | make the bodies distinct, or keep `systemPromptMode: append` and no `tools:` |
-| Writes fail with `EACCES` even with `writable: true` | the path is outside the write scope and the toolchain artefact directories | widen `write`, or keep build output inside the repo |
+| Writes fail with `EACCES` | the path is outside the write scope, `bash.writablePaths` and the artefact directories, or the task has no write configuration at all | widen `writeScope` / the role's `write`, name `writablePaths`, or deliver a report instead |
 
 ## Parent-side dispatch template
 
@@ -190,7 +180,7 @@ subagent(
     "pi-subagents-extend/1": {
       "permissions": {
         "scope": ["<file/directory glob>"],
-        "bash": { "allow": ["pnpm run typecheck", "pnpm test"], "writable": true }
+        "bash": { "allow": ["pnpm run typecheck", "pnpm test"] }
       }
     }
   }

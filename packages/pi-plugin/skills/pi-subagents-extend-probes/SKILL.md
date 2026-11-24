@@ -38,19 +38,22 @@ The three criteria that can misfire on slow tasks must be explicitly configured:
 
 ## What counts as "write activity"
 
-Only two kinds of events reset the idle timer:
-
-1. `edit` / `write` tool calls
-2. bash commands the classifier judges as writes
+Two kinds of event reset the idle timer. The file tools (`edit`, `write`, `copy`, `move`) are one. The
+other is a bash command that changed something, which the helper reports from the kernel: it watches the
+write scope (plus explicit `writablePaths`, existing directories only) with inotify and answers at
+`<spec>.observe`. So a build, a formatter or a code generator is progress without the extension having to
+judge the command line. Two runs leave no evidence either way — the change landed outside the watched
+roots, or no watch could be installed because the write scope does not exist yet (`watched: 0`) — and
+neither is read as "wrote nothing".
 
 A repeat counts only when its **output did not change**. The same command returning new output is
 progress — that is what measuring a repository looks like — so the count resets and a warning already
 issued is withdrawn. A child that is genuinely stuck prints the same thing every time and still walks
 into the threshold.
 
-Only **read-class** commands are counted for spinning: a command that writes (a `bash.allow` entry whose command the classifier judges as a write, or an `edit`/`write` call) is progress, so it clears the counts and cancels a warning already issued. A coder that edits a file and re-runs the same test command is therefore never stopped by this criterion — listing an interpreter (`node`, `python3`) in `bash.allow` exempts that interpreter's commands entirely, since interpreters are classified as writes.
+Every allowed bash command is counted for spinning, including interpreters such as `node` and `python3` — commands have no write class that could exempt them — but a command the kernel sees change a watched path is progress: it clears the counts and cancels a warning already issued. The same holds for a file edit or write. A coder that edits a file (or generates one through bash) and re-runs the same test command is therefore not stopped by this criterion.
 
-Read-class bash commands, and `read` / `grep` / `find` / `ls`, do not count. So "spinning with read-only bash commands" and "repeatedly scanning with read tools" are both judged as idling — this is intentional: no amount of read-only commands counts as progress.
+`read` / `grep` / `find` / `ls` do not count as write activity, so "repeatedly scanning with read tools" is judged as idling — this is intentional: no amount of reading counts as progress. A bash command that returns changed output is still progress for the repeating criterion.
 
 Corollary: if a task genuinely needs extensive read-only investigation, either loosen `idleWriteMs` or set `readOnly: true` (which skips both time-based criteria, "read-only idling" and "finished early").
 
@@ -61,7 +64,7 @@ Corollary: if a task genuinely needs extensive read-only investigation, either l
   "pi-subagents-extend/1": {
     "permissions": {
       "scope": ["src/auth/**"],
-      "bash": { "allow": ["pnpm run typecheck", "pnpm test"], "writable": true },
+      "bash": { "allow": ["pnpm run typecheck", "pnpm test"] },
       "maxDenies": 5,
       "probe": {
         "idleWriteMs": 360000,
@@ -90,7 +93,7 @@ warn only blocks a single tool_call and writes the reason to it; stop is a **har
 - `successPatterns` defaults to test-summary markers like `fail=0` / `0 failed`; if the project uses a different output format, write your own (e.g. `no errors`, `All files pass`). Do not use overly broad `ok` or `passed` — almost every command would match.
 - To stop a subagent from carelessly writing debug files, use `forbidWritePatterns` to name the project's own temporary file patterns (e.g. `scratch/.*`, `_tmp-.*`). A hit refuses that single write, without stopping the run.
 - Frequent "repeating a command" in the same delegation indicates a problem with the task description (it asks for the same action repeatedly); fix the task first instead of raising `repeatBash`.
-- **Permission refusal** only counts **authorization-type** refusals, judged by whether the parent agent could resolve it by granting broader authorization or adjusting settings. Counted: paths outside the read scope (including using `.` as a path), commands not in the allowlist, read budget exhausted, tools not in `allowTools`, bash entirely disabled. **Write refusals are counted separately** (`maxWriteDenies`, default 2): a subagent whose scope is readable but whose `writeScope` is narrower keeps trying to write, which is a usage mistake answered by delivering the report — not evidence that the grant was wrong. The refusal names the write scope and says so, and the read budget is untouched by it. Not counted: usage errors (missing path, shell metacharacters, empty command), hard rules (tools that are permanently unavailable such as `powershell`/`codemode`, and the role md's `bash.deny`), and the dependency gate (a lockfile directory with no `node_modules/.bin`), which reports an unfinished install rather than a grant that does not fit — counting these against the budget would let a single parameter typo kill a long task prematurely. When a subagent reports a usage error, fix the task to be clearer instead of masking it with a larger `maxDenies`.
+- **Permission refusal** only counts **authorization-type** refusals, judged by whether the parent agent could resolve it by granting broader authorization or adjusting settings. Counted: paths outside the read scope (including using `.` as a path), commands not in the allowlist, read budget exhausted, tools not in `allowTools`, bash entirely disabled. **Write refusals are counted separately** (`maxWriteDenies`, default 2): a subagent whose scope is readable but whose `writeScope` is narrower keeps trying to write, which is a usage mistake answered by delivering the report — not evidence that the grant was wrong. The refusal names the write scope and says so, and the read budget is untouched by it. Not counted: usage errors (missing path, shell metacharacters, empty command), hard rules (tools that are permanently unavailable such as `powershell`/`codemode`, and the role md's `bash.deny`) — counting these against the budget would let a single parameter typo kill a long task prematurely. When a subagent reports a usage error, fix the task to be clearer instead of masking it with a larger `maxDenies`.
 - Probes only handle deterministic signals. Semantic-level missed tests and unsafe changes are left to pi-subagents' built-in LLM watchdog (`subagents.watchdog`); the two complement each other.
 
 ## Working with pi-subagents' built-in capabilities

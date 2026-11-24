@@ -10,7 +10,7 @@ A binding answers three separate questions, and they are deliberately not merged
 | --- | --- | --- |
 | What may the subagent read? | `scope` | the extension, per tool call |
 | What may it write by hand? | `writeScope` (or `readOnly`) | the extension, per `edit`/`write` call |
-| What may its shell write? | `bash.writable` and friends | the kernel, via Landlock |
+| What may its shell write? | the write scope, `bash.writablePaths`, a deliverable | the kernel, via Landlock |
 
 They stay apart because the answers differ in practice. A coder in a linked worktree needs the
 repository's `objects/` and `refs/` writable for `git commit`, and must never have them in
@@ -47,20 +47,17 @@ The namespace key never holds policy fields directly: a dispatch wraps them in `
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `bash.allow` | `string[]` | The allowlist column. It answers only *may this command run here*; whether the command reads or writes is judged from the command itself (see below). Matching is per token as a prefix, or `re:` regexes (which see the command exactly as written). |
-| `bash.writable` | `boolean` | Grant write access to the write scope, for tests and builds; git's own directories and `node_modules` are added, so `git add`/`commit` and an install work. Only scope entries that cover a whole subtree open a directory; file-level entries open just the files they match. In a linked worktree git's grant excludes `.git/hooks` and `.git/config`; in a plain checkout it cannot. This is the ceiling: `allow` never implies write, and with `writable: false` there is no write access at all — `writablePaths` entries are not granted, and the sandbox mounts nothing writable except `/tmp` and the device nodes. |
+| `bash.allow` | `string[]` | The allowlist column. It answers only *may this command run here*; what it may write is a directory question, settled by the write scope and `bash.writablePaths`. Matching is per token as a prefix, or `re:` regexes (which see the command exactly as written). |
 | `bash.network` | `boolean` | Restore networking inside the sandbox. |
-| `bash.writablePaths` | `string[]` | Further writable paths, such as the pnpm store. |
+| `bash.writablePaths` | `string[]` | Further writable paths, such as the pnpm store. They also count as a write grant: a task with only `writablePaths` still gets the git and artefact-directory machinery the sandbox needs. |
 | `bash.scratchPaths` | `false \| string[]` | Adjusts the build/test artefact directories, which are derived from the toolchain manifests the project has; `false` disables detection, an array appends explicit directories. |
 | `bash.env` | `object` | Environment variables injected into the sandbox. |
 | `bash.deny` | `string[]` | Commands no caller can re-allow. A role md's entries are unioned in from the caller's own, so a dispatch can add deny entries but never remove one. |
-| `bash.dependencyGate` | `boolean \| string[]` | Defaults to `true`. Before a write-classified command or a package-manager invocation runs, every directory in the working tree (two levels down) that has a package-manager lockfile (`pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`, `bun.lockb`/`bun.lock`) must also show an install — `node_modules/.bin`, or `.pnp.cjs` for a Yarn PnP project; if one does not, the command is refused and the directory is named. Read-only commands and `git` are exempt: `git` needs no dependencies, and committing work is what keeps a worktree alive. A wrapper does not hide the payload — `sh -c "pnpm test"`, `env pnpm test` and `exec pnpm test` are gated too. What a script file contains (`node build.mjs`) is not visible from the command line, so that form passes; the gate is a guard against a confusing install attempt, not a boundary. It catches a missing install, not an install that is stale against the lockfile — the latter is pnpm's own `verify-deps-before-run` territory. An array lists directory prefixes to skip, for a lockfile nobody installs — a `fixtures/` sample, a vendored example: a plain path covers that directory and everything below it (the same reading as a `scope` entry), resolved against the working directory, but the match stops at a path boundary, so `fixtures` does not cover `fixtures-old`. Entries are literal paths, not globs; a glob is named in the refusal rather than silently matching nothing. `[]` skips nothing, the same as `true`. `false` turns the check off. |
 | `bash.cpuStallSeconds` | `number \| false` | Off by default. When set, the helper samples the CPU time of the whole command tree — it is PID 1 of a private PID namespace, so the tree is what `/proc` shows — and kills it once the tree has used **no** CPU for that many seconds, printing why and exiting `79`. The point is to separate a deadlock from a slow build, which a wall-clock limit cannot: a compiling tree gains CPU in every sample, a tree waiting on a lock, a socket, or an orphaned child gains none. Two limits to know before turning it on: a command that deliberately waits (`sleep 300`, a backoff loop) also uses no CPU and will be killed, and the helper cannot see output because stdio is inherited rather than piped, so "no output" cannot corroborate the reading. That is why nothing is armed by default — pick a number well above your slowest quiet gap between CPU bursts. The kill is annotated with `[sandbox]` in the result, saying a retry will stall the same way. |
 
 
-How the extension judges read or write from a command in `bash.allow`: a program table plus argument predicates — git subcommands and their flags (`git branch -d` writes, `git tag -l` does not), `sed -i`, `find`'s `-delete`/`-exec`/`-fprint*` actions, package-manager subcommands (`pnpm list` reads; `config`, `store` and `version` are judged by their second token, so `npm version patch` writes), interpreters, and `xargs`. A `;`/`|`/`&&` chain is judged segment by segment, and any segment that writes makes the whole command a write. When the classifier cannot pin a command down — a git or package-manager global flag it does not know, or what an `xargs` will run — the command is judged as a write: with `bash.writable: false` it is refused before it runs, and the refusal counts against the write budget (`maxWriteDenies`, default 2; the second consecutive refusal carries a warning, the third stops the run). A program outside every table is judged a read: it runs, and because the sandbox always mounts `/tmp` and the device nodes writable, it can still write there — what it cannot do is write outside the granted set, and a failure of that kind is annotated with a note saying the extension could not tell that the program writes.
-
-Two limits are deliberate. The classifier does not interpret git config semantics: `git -c core.pager='rm x' log` is judged by its subcommand, `log`, and the sandbox bounds what such a command could write. And with the network off, `git push /some/local/path` and `nc -z localhost` are refused as network commands even though both could complete offline (see [architecture](architecture-refusals.md#what-a-refusal-adds)).
+There is no command read/write classification: `allow` only decides whether a command may run. Every allowed command runs under the same Landlock rules. A write outside the granted directories is refused by the kernel at runtime, and the failed result gets a note: `[sandbox] <path> is outside the writes the parent granted (<granted paths>) — a permission, not a filesystem fault. Writing elsewhere will not help; use contact_supervisor to ask for writablePaths or a wider write scope.`
+With the network off, `git push /some/local/path` and `nc -z localhost` are still refused as network commands even though both could complete offline; the fixed list and its carve-outs are in [refusals](architecture-refusals.md#what-a-refusal-adds).
 
 ### What bash may read
 
@@ -68,7 +65,7 @@ The sandbox's read face stays open: `node`, `rg`, `cargo` and the rest live in `
 the read root would kill every command at once. Reads are the file tools' job — `read`, `grep`, `find`
 and `ls` are judged against `scope` before they run.
 
-One nudge applies on top, for **read-class** commands only (any column judged as read), and it is judged
+One nudge applies on top, to **every** allowed bash command, and it is judged
 against the **working tree**: the directory the command runs in, which is the session's cwd. A token
 qualifies as a path when it contains a slash and consists only of path characters — `src/index.ts`,
 `./a.ts`, `../outside/x` and `~/x` all do, while `foo`, `--flag` and `@scope/pkg` do not. It is resolved
@@ -101,6 +98,7 @@ characters. These count as allowed:
 | `rg "$DIR"` | dynamic, so the token is skipped |
 | `rg foo https://example.com/a` | a URL, so skipped |
 | `rg foo /tmp/out.md` | the command's private scratch directory, unless the session's cwd is itself under it — then the helper does not privatise that directory and it is an ordinary host path |
+| `rg foo ~/.cache/pnpm/store` | a path covered by a write grant, such as `bash.writablePaths` or an absolute `writeScope`, is exempt — otherwise that grant would be unusable from bash |
 | `rg -n ./src/auth/login.ts` | inside the working tree, so the check passes — the same holds for the bare spelling `src/auth/login.ts`, which is a candidate too since it contains a slash |
 | `rg foo escape-link/x` | **refused** when `escape-link` is a symlink to `/home/other`: the relative spelling is not an escape route, the real path is what counts |
 
@@ -177,7 +175,7 @@ The report is longer than a reply can carry, and a reviewer that cannot write ha
   "allowTools": ["read", "grep", "find", "ls", "bash", "write", "contact_supervisor"],
   "maxDenies": 12,
   "maxWriteDenies": 2,
-  "bash": { "writable": false, "dependencyGate": false, "allow": ["git diff", "git show", "rg", "cat", "ls"] }
+  "bash": { "allow": ["git diff", "git show", "rg", "cat", "ls"] }
 }
 ```
 
@@ -221,12 +219,15 @@ usually reading the wrong things. Hitting the cap is a refusal, so it is charged
 ### A build or test runner
 
 ```json
-{ "scope": ["."], "writeScope": ["."], "bash": { "writable": true, "allow": ["pnpm test", "cargo test", "cargo check"] } }
+{ "scope": ["."], "writeScope": ["."], "bash": { "allow": ["pnpm test", "cargo test", "cargo check"] } }
 ```
 
-`bash.writable` opens the write scope plus the machinery a build needs: `node_modules`, the
+A write grant opens the write scope plus the machinery a build needs: `node_modules`, the
 artefact directories of whichever toolchains the project declares (detected from manifests, never
 from git), and in a linked worktree the parts of `.git` that `git add`/`commit`/`stash` write.
+The grant is read from the configuration, not from what exists today: a write scope naming a file
+the task will create still counts. With no write configuration at all the sandbox receives no
+writable paths — not even `.git` or `node_modules`.
 
 ## Writing a report instead of escalating
 
@@ -286,7 +287,7 @@ role md, and the field list is the whole rule:
 | **replaced** | `allowTools`, `bash.allow`, `bash.writablePaths` | a field the dispatch names replaces the role md's list; a field it omits is filled from the md. These are grants, so a caller narrowing them is legitimate — a dispatch is made tighter than its role simply by writing a shorter list. An **empty array written in the dispatch** is not "add nothing" — it empties that column (see below). |
 | **union, hard floor** | `bash.deny` | a deny entry is a restriction, not a grant, and no layer can lift one: "structurally forbidden" has to survive a dispatch that rewrites the allowlist. That is why it is unioned while the grant fields are replaced: a restriction survives, a grant may be narrowed |
 | **replaced** | `scope`, `writeScope` | a task's range has to be able to be **narrower** than the role default. A union would grow file access on every dispatch — the wrong direction for the one field that decides what may be read, and it would make "narrower than the role" inexpressible |
-| **the call wins** | `readOnly`, `maxReads`, `maxDenies`, `maxWriteDenies`, `probe`, `tools`, `worktree`, `bash.writable`, `bash.network`, `bash.dependencyGate`, `bash.cpuStallSeconds`, `bash.scratchPaths` | these describe *this* task, so the dispatch's value is the value. `probe` and `tools` are replaced whole, not deep-merged. `bash.env` merges per variable name, the call winning on a collision |
+| **the call wins** | `readOnly`, `maxReads`, `maxDenies`, `maxWriteDenies`, `probe`, `tools`, `worktree`, `bash.network`, `bash.cpuStallSeconds`, `bash.scratchPaths` | these describe *this* task, so the dispatch's value is the value. `probe` and `tools` are replaced whole, not deep-merged. `bash.env` merges per variable name, the call winning on a collision |
 
 Why `deny` can never be anything but a union: the role md's deny list is where a project writes what must
 not happen at all (`git push`, `git reset`). If a call could replace it, every dispatch would have to
@@ -303,7 +304,7 @@ the role md's list, an omitted field is filled from it:
     "permissions": {
       "scope": ["src/auth/**"],
       "allowTools": ["read"],
-      "bash": { "allow": ["pnpm run typecheck"], "writable": true }
+      "bash": { "allow": ["pnpm run typecheck"] }
     }
   }
 }
@@ -382,4 +383,4 @@ pi -e ~/extensions/pi-subagents-extend/packages/pi-plugin/src/index.ts -p "<task
 ```
 
 `/permission` reports what the session actually resolved: source, read scope, write scope when it
-differs, the bash allowlist, both denial counters and the probe state.
+differs, the bash allowlist, the helper path, `Sandbox: network on|offline` with its writable paths, both denial counters and the probe state.

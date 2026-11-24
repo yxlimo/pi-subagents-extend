@@ -51,7 +51,7 @@ Reads and writes are authorised by different lists, and neither is merged into t
 | --- | --- | --- |
 | read | `scope` | `read`, `grep`, `find`, `ls` |
 | write, tools | `writeScope` | `edit`, `write` |
-| write, processes | `bash.writablePaths` (with `bash.writable`) | the Landlock rules of bash subprocesses |
+| write, processes | the write scope, `bash.writablePaths`, a deliverable | the Landlock rules of bash subprocesses |
 
 Without the split, "read the whole repository, write only `.pi/reviews`" cannot be expressed: a
 reviewer either may edit `lib/` or may write nothing at all.
@@ -60,9 +60,11 @@ Keeping the third layer separate is not tidiness. A `git commit` inside a worktr
 main checkout's `.git/objects`, which has to be granted — and `.git` must never appear in the write
 scope, because that is what opens repository metadata to hand editing.
 
-With `bash.writable`, the sandbox is therefore given what the write scope covers plus git's own
+With a write grant, the sandbox is therefore given what the write scope covers plus git's own
 directories and `node_modules`, not the working directory wholesale. A subagent that may read `lib/`
 but not write it cannot route around the rule with a shell redirect.
+
+The grant is read from the configuration: a write scope, `bash.writablePaths`, or a deliverable file. When all three are empty the sandbox gets no writable path at all, not even `.git` or `node_modules`, so a read-only task cannot plant a hook there.
 
 What "covers" means is decided by the glob, because Landlock can only grant and a rule on a
 directory grants everything beneath it. An entry that covers a whole subtree (`dir`, `dir/**`) opens
@@ -85,7 +87,7 @@ plant a hook. That is a limit of the mechanism, so it is documented rather than 
 worktree when the difference matters, which is the normal arrangement for delegated work here.
 
 Build and test artefacts are the exception that makes this usable, and which ones they are follows
-from what the project is built with. `bash.writable` grants the artefact directories of every
+from what the project is built with. A write grant gives bash the artefact directories of every
 toolchain whose manifest appears in the repository root or up to two levels below it — `package.json`
 for Node, `Cargo.toml` for Rust, `go.mod` for Go, `pyproject.toml` for Python, `pom.xml` and
 `build.gradle` for Java, and the rest of that table in `TOOLCHAINS` — with each directory resolved
@@ -96,14 +98,12 @@ repository reaches six — and the cap exists only so a pathological one cannot 
 command walk thousands of entries. Its order is fixed by sorting the entries by name, because
 `readdir` order is a property of the filesystem: tmpfs returns sorted names, `ext4` with `dir_index`,
 XFS and NFS return hash order. Without the sort, which directories land inside the cap would differ
-between two machines holding the same repository, and the gate could pass in one and refuse in the
-other with nothing in the output to explain it.
+between two machines holding the same repository, and the writable directory set could differ with nothing in the output to explain it.
 
-Directory symlinks are not followed. A lockfile that is itself a symlink counts as a lockfile, but a
-*package directory* reached only through a symlink is invisible to the scan. Following it would be
+Directory symlinks are not followed. A manifest that is itself a symlink still counts, but a *package directory* reached only through a symlink is invisible to the scan. Following it would be
 wrong here rather than merely incomplete: this same walk feeds the writable set, so a link pointing
 outside the repository would widen what the sandbox may write instead of narrowing it, and cycles,
-links to enormous trees and network mounts come along for free. Real projects rarely put a lockfile
+links to enormous trees and network mounts come along for free. Real projects rarely put a manifest
 behind such a link, and the escape is to name the directory in `bash.scratchPaths`.
 
 Two tiers keep this quiet. A directory that exists is granted; a directory the toolchain always
@@ -135,12 +135,17 @@ default, a partial object enables only the fields it names, `"probe": false` dis
 | Criterion | Default | Behaviour |
 | --- | --- | --- |
 | Read-only idling | explicit: `idleWriteMs: 360000`, `abortGraceMs: 120000` | no write activity within `idleWriteMs` warns at the next tool boundary; after `abortGraceMs` more, the turn stops |
-| Repeating a command | on, `repeatBash: 3` | the third read-class `bash` command whose output did not change warns, the next one stops |
+| Repeating a command | on, `repeatBash: 3` | the third `bash` command whose output did not change warns, the next one stops |
 | Finished early | explicit: `successIdleMs: 300000`, `successPatterns` | once output matches a success marker, no new change within `successIdleMs` stops the turn |
 | Writing litter | explicit: `forbidWritePatterns: []` | a `write`/`edit` target matching the pattern is refused outright |
 
-Write activity means `edit` and `write` calls and bash commands classified as writes — an `allow` entry whose command the classifier judges to write. Reads do not
-count, or a subagent could circle with read-only `bash` and escape the criterion. A task with
+Write activity is what the file tools do — `edit`, `write`, `copy`, `move` — plus what the kernel sees
+a bash command do. The helper holds an inotify watch on the write scope (plus explicit
+`writablePaths`, existing directories only) and reports at `<spec>.observe` whether anything changed
+there, so a build or a code generator that produces files counts as progress without the extension
+having to guess from the command line. Two runs leave no evidence either way: one whose change landed
+outside the watched roots, and one where no watch could be installed — `watched: 0` means the write
+scope does not exist yet. Neither is read as "wrote nothing". A task with
 `readOnly: true` skips the two time-based criteria, which are meaningless for it.
 
 A relative `writeScope` entry is bound to the task tree: `matches()` refuses anything whose real path
@@ -152,13 +157,12 @@ review is given exactly one file to write: `readOnly: true` together with
 `writeScope: [".pi/review-reports"]`, plus `write` in `allowTools`. Without an explicit
 `writeScope`, `readOnly` still means no writes at all.
 
-The repeating-command criterion means "the same thing repeated **without progress**", so write
-activity also clears its counts and cancels a warning already issued: a subagent that edits a file and
-re-runs the same test command is working, not spinning. The cost is that write-class commands are not
-covered by this criterion at all — `allow` lists interpreters as writes, so an interpreter's commands
-are exempt, and no amount of repetition trips the check. Read-class
-commands, the real spinning case, are unaffected. This was measured the hard way: two coding subagents
-were stopped mid-task by the criterion before the reset existed.
+The repeating-command criterion means "the same thing repeated **without progress**", so a file edit
+clears its counts and cancels a warning already issued: a subagent that edits a file and re-runs the
+same test command is working, not spinning. Every allowed bash command is counted, including
+interpreters such as `node`; a command that the kernel sees change a watched path resets the check, and
+so do the file tools. This was measured
+the hard way: two coding subagents were stopped mid-task by the criterion before the reset existed.
 
 ### The stall watchdog
 
@@ -231,42 +235,6 @@ Usage errors and hard rules never count: a missing path, shell metacharacters, a
 `powershell`/`codemode`, or a command matched by the role md's `bash.deny`. Those cannot be fixed by
 granting more, so charging them against the budget would stop a task for the wrong reason.
 
-The dependency gate is in this class too. Before a build or a package-manager command runs, every
-directory in the tree (two levels down, same scan as the artefact directories) that has a
-package-manager lockfile (pnpm, npm, yarn, bun) must also have `node_modules/.bin`; otherwise the
-command is refused and the directory is named. Read-only commands and `git` are exempt on purpose:
-`git` needs no dependencies, and committing is what keeps a worktree from being discarded when a run
-ends. Wrappers are looked through: when the first token is a shell or `env`/`exec`/`command`/`timeout` style wrapper and the payload names a package manager, the command is gated. A script file (`node build.mjs`, `./ci.sh`) is opaque to a text-level check, which is the honest limit of a guard that exists to avoid a confusing install attempt rather than to enforce a boundary. The gate reports a missing install, not an install that has drifted from its lockfile — that
-second failure is pnpm's `verify-deps-before-run` trying to fix things from inside the sandbox, and
-detecting it would mean comparing `.modules.yaml` against the lockfile, which is project knowledge
-this extension deliberately does not carry. The failure it prevents
-is worth the check: without it the first build command tries to install inside the sandbox, where
-the package store is usually not writable, so pnpm silently falls back to an empty store or the
-command blocks on a lock — with nothing in the output pointing at the install. Retrying cannot fix
-an unfinished install, which is why the refusal is uncounted, and why it tells the subagent to use
-`contact_supervisor` instead of trying again. `bash.dependencyGate: false` turns it off for a
-read-only task that never builds.
-
-A committed lockfile in a directory nobody installs — a `fixtures/` sample, a vendored example —
-would otherwise block every write in the tree, and the only escape would be turning the check off
-for the real packages too. `bash.dependencyGate` therefore also takes an array of directory
-prefixes to skip. A relative prefix is resolved against the working directory and an absolute one is
-taken literally; either way it covers that directory and everything below it, which is the same
-reading a `scope` entry gets, and the match stops at a path boundary, so `fixtures` does not cover
-`fixtures-old`. Because a relative prefix is always *below* the working directory, the scan starts
-inside none of them; only an absolute prefix can contain the working directory, and then nothing is
-scanned at all. Two relative spellings, `.` and `..`, do resolve to the working directory or an
-ancestor of it and therefore turn the whole check off — they mean "ignore everything", which is what
-the prefix says, but `false` is the clearer way to write it.
-
-Entries are literal paths, not globs: the question the list answers is "nobody installs here", which
-is one fixed location. Nothing rejects a glob, so `fixtures/*` and a typo both match no directory and
-change nothing — which is why the refusal names any entry containing `*` or `?` instead of leaving
-that to be discovered. Ignored directories are pruned during the scan rather than filtered
-afterwards, so a deep ignored tree cannot exhaust the scan's root budget and push a real package out
-of range. The array is a skip list, not a switch: `[]` behaves like `true`, and `false` remains the
-single way to stop checking.
-
 The budget is **consecutive**, which is what the refusal text and the README promise: any allowed
 working call resets both counters, so a subagent that tries a path, learns, and moves on is never
 stopped for a mistake it already corrected. The rescue channel is the exception — `contact_supervisor`
@@ -300,7 +268,6 @@ that cannot start working. Both apply **only when the command actually failed** 
 contained such a string and came back carrying "this is outside the writes the parent granted".
 
 `bash.network` off, `requiresNetwork` in `src/bash/network.ts` names a fixed list of programs and subcommands that only make sense with a round
-`bash/index.ts` names a fixed list of programs and subcommands that only make sense with a round
 trip: `curl`, `wget`, the netcat family, `telnet`, `ssh`/`scp`/`sftp`, the DNS and host-reachability
 probes, `gh`, `docker pull|push|login`, `npm|pnpm|yarn publish`, and `git clone|fetch|pull|push|ls-remote`
 plus `git remote update` and `git submodule update --remote`. The check runs after the allowlist and
