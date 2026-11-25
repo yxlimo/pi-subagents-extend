@@ -77,6 +77,10 @@ extend:
         - rm -rf
   worktree:
     enabled: true
+  # The one file this role must produce. See Step 2c: it lands in the main
+  # checkout, so discarding the worktree does not discard the report.
+  output:
+    deliverable: reports/<role>-report.md
 ---
 
 <the role's body: what it owns, its boundaries, the gates it runs, what it must deliver>
@@ -134,6 +138,41 @@ install is visible instead of silent. Two limits: preExec runs unsandboxed, so k
 commands and not the task itself; and anything that must download at *run* time (a package manager in
 `bash.allow`, an e2e suite that fetches a browser) needs `bash.network: true`, because by then the
 sandbox is up and the network is gone.
+
+## Step 2c: name the one file the child must produce
+
+A child dispatched with `worktree: true` works in a throwaway checkout. Anything it writes there is gone
+when the run ends, and a child has no way to put a file anywhere else — the write scope binds relative
+paths to the task tree. `extend.output.deliverable` is the way out: name one file, relative to the task
+tree, and this extension makes it a real file in the **main checkout**.
+
+```yaml
+  output:
+    deliverable: reports/routing-review.md
+```
+
+What happens at session start:
+
+1. the main checkout is located from the child's cwd (worktree `commondir` → gitfile → `git worktree
+   list` → cwd, first hit wins);
+2. the parent directories of `<main>/reports/routing-review.md` are created there;
+3. `<childCwd>/reports/routing-review.md` becomes a symlink to that real file, so the child writes to the
+   short path it was told;
+4. the real file is added to the write grants as an absolute path — bash and the write tools can both fill
+   it — and the child's prompt says where it is:
+   it is given both paths in its prompt — the short one to write to, the absolute one the parent reads.
+
+Three things this is not. It is **one file, not its directory**: a write to `reports/other.md` is still
+refused, which is the point of naming a file instead of widening the scope. It is **not a dispatch
+field**: `output` in `extensionBindings` is ignored with a warning, because the deliverable belongs to the
+role, not to one call. And it is **not for a coding role**: a child whose job is to change files delivers
+a diff, and the diff already survives the worktree. Use it for a role that produces a *document* — a
+review, an audit, a report.
+
+The path is validated: absolute, `..`, or a drive letter is reported and dropped. If the target already
+exists as a symlink or a directory, nothing is granted and the reason is reported, because a directory
+grant would open everything under it.
+
 ## Step 3: the permission block, field by field
 
 Everything lives under `extend.permissions`, except `worktree` which is a sibling of `permissions` inside `extend`.
