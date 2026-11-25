@@ -302,14 +302,13 @@ console.log("pi-subagents-extend role/deliverable/context unit")
   mkdirSync(target, { recursive: true })
   writeFileSync(join(target, "keep.txt"), "keep\n")
   const policy = { absoluteWrite: [] as string[] }
-  const options: { sections?: Record<string, string> } = {}
   const warnings: string[] = []
 
   const result = withoutGit(() =>
-    wireDeliverable(caseRoot, { output: { deliverable: "dist" } }, policy, options, (m) => warnings.push(m)),
+    wireDeliverable(caseRoot, { output: { deliverable: "dist" } }, policy, (m) => warnings.push(m)),
   )
   assert.deepEqual(policy.absoluteWrite, [], "a directory opens no write grant")
-  assert.deepEqual(options.sections, undefined, "no deliverable section is announced")
+  assert.equal(result.deliverable, undefined, "a refused deliverable is not announced")
   assert.ok(
     warnings.some((m) => m.includes(target) && m.includes("not a regular file")),
     warnings.join("\n"),
@@ -327,14 +326,13 @@ console.log("pi-subagents-extend role/deliverable/context unit")
   symlinkSync(outside, join(caseRoot, ".pi"), "dir")
   const deliverable = ".pi/reports/review.md"
   const policy = { absoluteWrite: [] as string[] }
-  const options: { sections?: Record<string, string> } = {}
   const warnings: string[] = []
 
-  withoutGit(() =>
-    wireDeliverable(caseRoot, { output: { deliverable } }, policy, options, (m) => warnings.push(m)),
+  const result = withoutGit(() =>
+    wireDeliverable(caseRoot, { output: { deliverable } }, policy, (m) => warnings.push(m)),
   )
   assert.deepEqual(policy.absoluteWrite, [], "no outside file is granted")
-  assert.deepEqual(options.sections, undefined, "no deliverable section is announced")
+  assert.equal(result.deliverable, undefined, "a refused deliverable is not announced")
   assert.equal(existsSync(join(outside, "reports", "review.md")), false, "the outside file was never created")
   assert.ok(
     warnings.some((m) => m.includes(deliverable) && m.includes(outside)),

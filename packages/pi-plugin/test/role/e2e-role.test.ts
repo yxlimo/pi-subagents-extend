@@ -220,7 +220,7 @@ const tailOf = (run: HostRun): string => `stderr: ${run.stderr.slice(-800)}`;
 
 // 2. extend.output.deliverable：提示词含短路径，真实文件落在主检出，隔壁被拒。
 {
-  const { run, subagent, mock, files } = await runCase(
+  const { run, subagent, mock, files, project } = await runCase(
     "role-deliverable.yaml",
     "Go.",
     "role-deliverable",
@@ -254,8 +254,12 @@ const tailOf = (run: HostRun): string => `stderr: ${run.stderr.slice(-800)}`;
   );
   assert.ok(
     childBodies.some((body) => JSON.stringify(body).includes(
-      "Write the deliverable to `role-report.md`")),
-    `the child's prompt must carry the injected deliverable section with the short path. ${tail}`,
+      `Deliverable: write it to \`role-report.md\`; the parent reads it at \`${join(project, "role-report.md")}\`.`)),
+    `the child's prompt must carry the Confinement section's delivery line with both paths. ${tail}`,
+  );
+  assert.ok(
+    childBodies.some((body) => JSON.stringify(body).includes("## Confinement")),
+    `the child's prompt must carry the Confinement summary. ${tail}`,
   );
   const deliverable = files["role-report.md"];
   assert.ok(

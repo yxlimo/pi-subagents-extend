@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { DenyCounter } from "../budgets.ts";
 import { deliverableTarget, ensureDeliverableLink, mainRepoRoot } from "../deliverable.ts";
+import { SCOPE_SECTION, scopeText } from "../scope-prompt.ts";
 import { canonical } from "../paths/index.ts";
 import { denyAll } from "../policy/index.ts";
 import { agentMdDirs, outputFromBlock, parseRoleName, policyFromBlock, readExtendBlock, resolveAgentFile, resolveRoleFromPrompt, setupFromBlock, worktreeFromBlock } from "../role-config.ts";
@@ -20,8 +21,6 @@ import type { Wiring } from "./context.ts";
  * judgeToolCall 与本处理器都注册各自的通道，最近一次写入的生效。四个导出的接线函数
  * 由 index.ts 原样再导出（阶段 3 的测试从 index.ts 取它们）。
  */
-
-const DELIVERABLE_SECTION = "pi_subagents_extend_deliverable";
 
 /**
  * 交付物授权只给主检出里的一个普通文件：目录会把整棵子树变成写面，软链会把授权指到树外。
@@ -78,16 +77,15 @@ function deliverableGrant(target: string, root: string, warn: (message: string) 
 }
 
 /**
- * output.deliverable 的接线：建软链、把真实文件加进写授权、并给子代理一条提示段落。
+ * output.deliverable 的接线：建软链、把真实文件加进写授权、并返回相对路径给 scope 摘要。
  * 抽成具名函数是为了让阶段 3 的测试能直接走同一条路径，而不是复制一份判定。
  */
 export function wireDeliverable(
 	cwd: string,
 	block: Record<string, unknown> | undefined,
 	policy: { absoluteWrite: string[] },
-	options: { sections?: Record<string, string> } | undefined,
 	warn: (message: string) => void,
-): { link?: ReturnType<typeof ensureDeliverableLink>; target?: string } {
+): { link?: ReturnType<typeof ensureDeliverableLink>; target?: string; deliverable?: string } {
 	setDeliverableTargetPath(undefined);
 	const { output, problems } = outputFromBlock(block ?? {});
 	for (const problem of problems) warn(`pi-subagents-extend: ${problem}`);
@@ -102,16 +100,12 @@ export function wireDeliverable(
 	if ("warning" in link) warn(`pi-subagents-extend: ${link.warning}`);
 	const target = deliverableTarget(anchor.root, deliverable);
 	const grant = deliverableGrant(target, anchor.root, warn);
+	// 授权没成功就不把相对路径交回去：摘要里那条 Deliverable 是「写这里」，说一个写不进去的
+	// 路径等于给子代理一条注定被拒的指令。
 	if (!grant) return { link, target };
 	if (!policy.absoluteWrite.includes(grant)) policy.absoluteWrite.push(grant);
 	setDeliverableTargetPath(grant);
-	if (options) {
-		options.sections = {
-			...(options.sections ?? {}),
-			[DELIVERABLE_SECTION]: `Write the deliverable to \`${deliverable}\`. Name the file in your final message; the parent reads it at \`${grant}\`.`,
-		};
-	}
-	return { link, target };
+	return { link, target, deliverable };
 }
 
 /** 会话级记住 nodeModules 的选择；写在拒绝文案里的提示只在 keep / 缺席时给，remove 后给就是假提示。 */
@@ -354,15 +348,36 @@ export async function wireAgentStart(w: Wiring, event: BeforeAgentStartEvent, ct
 			w.roleSource = `role md ${file}`;
 			w.applyRoleBaseline();
 		}
-		wireDeliverable(
+		const delivered = wireDeliverable(
 			cwd,
 			read.block,
 			w.policy,
-			(event as { systemPromptOptions?: { sections?: Record<string, string> } }).systemPromptOptions,
 			(message) => w.uiWarning?.(message),
 		);
 		wireWorktree(cwd, read.block, (message) => w.uiWarning?.(message));
 		await wirePreExec(cwd, read.block, (message) => w.uiWarning?.(message));
+
+		// 子会话只收一个 confinement section：旧交付物段落改由这里统一写出。
+		if (w.policy.active || w.roleSource) {
+			const eventOptions = event as { systemPromptOptions?: { sections?: Record<string, string> } };
+			const options = eventOptions.systemPromptOptions ?? (eventOptions.systemPromptOptions = {});
+			const bash = w.policy.bash;
+			options.sections = {
+				...(options.sections ?? {}),
+				[SCOPE_SECTION]: scopeText({
+					source: w.roleSource ?? w.policy.source,
+					read: w.policy.globs,
+					write: [...w.policy.writeGlobs, ...w.policy.absoluteWrite],
+					...(bash
+						? { bash: { allow: bash.allow, deny: bash.deny, network: bash.network, writablePaths: bash.writablePaths } }
+						: {}),
+					budgets: { deny: w.policy.maxDenies, write: w.policy.maxWriteDenies },
+					...(delivered.target && delivered.deliverable
+						? { deliverable: { short: delivered.deliverable, target: delivered.target } }
+						: {}),
+				}),
+			};
+		}
 	} finally {
 		w.roleWirings.delete(wiringKey);
 		finishWiring();

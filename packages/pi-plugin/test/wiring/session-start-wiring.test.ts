@@ -8,6 +8,7 @@ import { handler, specOf, workdir, repo, childRun } from "../harness.ts"
 import "../support.ts"
 
 const rc = (await import(join(repo, "src", "role-config.ts"))) as unknown as typeof import("../../src/role-config.ts")
+const dm = (await import(join(repo, "src", "deliverable.ts"))) as unknown as typeof import("../../src/deliverable.ts")
 
 // 249. The nodeModules hint reaches the neither-readable-nor-writable refusal (P1-1).
 {
@@ -251,9 +252,12 @@ const rc = (await import(join(repo, "src", "role-config.ts"))) as unknown as typ
     outside.reason.includes(`role md ${md}`),
     `the refusal must name the md as a source, got: ${outside.reason}`,
   )
+  const scopeSection = (options.sections as unknown as Record<string, string> | undefined)?.pi_subagents_extend_scope ?? ""
   assert.ok(
-    Object.keys(options.sections ?? {}).some((name) => name.includes("deliverable")),
-    `the md's deliverable must be wired into the prompt sections, got: ${Object.keys(options.sections ?? {}).join(", ")}`,
+    scopeSection.includes(
+      `Deliverable: write it to \`report.md\`; the parent reads it at \`${dm.deliverableTarget(proj, "report.md")}\`.`,
+    ),
+    `the md's deliverable must be wired into the Confinement section, got: ${Object.keys(options.sections ?? {}).join(", ")}`,
   )
   run.restore()
   console.log("  ok   a foreground child applies the role md extend from its bindings payload")

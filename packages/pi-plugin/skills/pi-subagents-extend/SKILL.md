@@ -131,7 +131,7 @@ on disk before the sandbox comes up.
 | pnpm workspace | `pnpm install --frozen-lockfile` |
 | npm / yarn | `npm ci` or `yarn install --frozen-lockfile` |
 | pins its toolchain with mise | `mise install && pnpm install --frozen-lockfile` — mise's own downloads need the network too, and it resolves them on every invocation |
-| dependencies already exist in the main checkout | symlink them rather than re-install: one `ln -s` per `node_modules` tree, which is faster and works with no network at all |
+| dependencies already exist in the main checkout | install them for real — `pnpm install --frozen-lockfile --prefer-offline` is 0.2s against a warm store — and **do not symlink** the main checkout's `node_modules` into the worktree. Measured: pnpm 12's `verify-deps-before-run` judges a symlinked `node_modules` as stale, so the first gate that runs through pnpm attempts an install, and with no network each package's fetch is retried a minute later — a dispatch sat there half an hour with nothing on stdout. The path nudge is the second reason: it resolves a path token by its real target, so `node node_modules/…/tsc.js` is refused as outside the task tree even though `node_modules` is granted writable. |
 
 It runs once per session, so this is paid once, and its output goes to the child's session — a failed
 install is visible instead of silent. Two limits: preExec runs unsandboxed, so keep it to bootstrap
@@ -239,6 +239,11 @@ Policy that is loaded but not applied looks exactly like policy that works, unti
 1. **Out of scope is refused.** `read` a path outside `scope`; the refusal must name this role's md path.
 2. **In scope is allowed.** `read` a path inside `scope` and report one line of it — otherwise check 1 also passes when *everything* is refused.
 3. **The gates run.** `mise run <task>` (or whatever `bash.allow` names) returns real output. If it produces nothing instead, the dependencies were not prepared — see [Step 2b](#step-2b-install-dependencies-in-setuppreexec).
+4. **The child can read back its limits.** Every child with a configuration gets one prompt section
+   describing the effective policy — the `## Confinement` block, see
+   [what the child is told](../../../../docs/usage.md#what-the-child-is-told). Ask it to repeat that block: it
+   is derived from the merged policy, so it tells you which scope, allowlist and budgets were actually
+   applied, and an empty answer means the wiring never ran.
 
 Do the same once with `async: false` if you dispatch foreground children — that is the shape where the extension is missing entirely, and nothing in the parent session shows it.
 
@@ -298,9 +303,9 @@ The dispatch spells the same fields differently from the role md: `writeScope` a
 
 ## Where the details are
 
-- [usage](../../../docs/usage.md) — every field, the merge rules between the two layers, worked examples.
-- [loading](../../../docs/loading.md) — every channel pi accepts and what is lost without it.
-- [architecture](../../../docs/architecture.md) — why the layers are separate, why `deny` is a union.
-- [refusals](../../../docs/architecture-refusals.md) — the refusal texts and what each one means.
+- [usage](../../../../docs/usage.md) — every field, the merge rules between the two layers, worked examples.
+- [loading](../../../../docs/loading.md) — every channel pi accepts and what is lost without it.
+- [architecture](../../../../docs/architecture.md) — why the layers are separate, why `deny` is a union.
+- [refusals](../../../../docs/architecture-refusals.md) — the refusal texts and what each one means.
 - skill `pi-subagents-extend-probes` — when a child idles, loops, or finishes early.
 - skill `pi-subagents-extend-context` — keeping the main-agent-only sections of `AGENTS.md` out of children.

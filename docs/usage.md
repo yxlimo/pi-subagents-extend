@@ -160,6 +160,46 @@ wider `pnpm` that would also match — a failure of the first must not be explai
 others. Once the list is truncated, the text says so (`only the first 8 are listed`): asking someone to
 pick from a list whose tail was cut is asking for a guess. The annotation is only added to a failed result.
 
+## What the child is told
+
+This is not a field: it is what the extension puts in front of the child. When a role md or a set of
+bindings is in effect, the child's prompt gains one section — stored under the key
+`pi_subagents_extend_scope` — that states the limits it is actually running under:
+
+```text
+## Confinement
+
+A refusal names what refused it; read it instead of retrying a differently spelled path.
+
+- Configuration: role md /home/me/project/.pi/agents/coder-routing.md
+- Read: lib/router/**, lib/session-id.ts
+- Write: lib/router/**
+- Bash: 14 allowed commands, network off
+- Allowed commands: git status, git diff, …, mise run typecheck
+- Always refused: git commit, git push, …, rm -rf
+- Also writable: /home/me/.cache/pnpm/store
+- Budgets: 5 refusals in a row stop the session; 2 for writes
+- Deliverable: write it to `reports/routing.md`; the parent reads it at `/home/me/project/reports/routing.md`.
+```
+
+Every line comes from the **effective** policy — the role md merged with the dispatch that named it, with
+`bash.deny` unioned — never from one layer alone, so the child cannot be told a scope narrower or wider
+than the one it will be judged by. Lines that have nothing to say are left out: no `Also writable` without
+`bash.writablePaths`, no `Deliverable` unless `output.deliverable` names a file that was actually granted, and `Bash: not available in this
+session` when the role has no bash at all. `Write: nothing — this task is read-only` is what an empty write
+scope reads as. `Write:` lists the relative globs first and the absolute grants after them — a deliverable's
+real file and a `writeScope` entry that points outside the tree both appear there, because both are files
+the child may write.
+
+The reason it exists is a measured failure: a child that does not know its jail spends its first calls
+discovering it, one refused spelling at a time, and each refusal costs a turn and burns one of the deny
+budget's lives. A main session gets nothing — the parent is the one writing the configuration. So does a
+child with no configuration at all: there is nothing to describe, and its refusals would come from the
+host, not from here.
+
+Being a section rather than a rewrite of the system prompt keeps the parent's prompt cache intact: the
+text is stable for the whole session, so it is paid for once.
+
 ## Recommended scenarios
 
 Each JSON block in this section is the inner `permissions` object; put it under `permissions` in the namespace key when dispatching.

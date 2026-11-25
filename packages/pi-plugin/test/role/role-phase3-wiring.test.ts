@@ -7,6 +7,8 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, realpathS
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
+import type { PromptOptions } from "../types.ts";
+import { childRun } from "../harness.ts";
 
 const here = new URL(".", import.meta.url);
 const src = (name: string): string => pathToFileURL(join(here.pathname, "..", "..", "src", name)).href;
@@ -54,19 +56,15 @@ console.log("pi-subagents-extend role phase 3a wiring");
   try {
     mkdirSync(dir, { recursive: true });
     const policy = { absoluteWrite: [] as string[] };
-    const options: { sections?: Record<string, string> } = {};
     const warnings: string[] = [];
-    const result = wireDeliverable(dir, { output: { deliverable: "notes/out.md" } }, policy, options, (m) => warnings.push(m));
+    const result = wireDeliverable(dir, { output: { deliverable: "notes/out.md" } }, policy, (m) => warnings.push(m));
     const target = deliverableTarget(dir, "notes/out.md");
     assert.equal(result.link?.action, "none");
     assert.equal(result.target, target);
     assert.ok(policy.absoluteWrite.includes(target), "the real file is granted even with no link");
     assert.deepEqual(warnings, []);
-    const section = Object.values(options.sections ?? {})[0];
-    assert.ok(section?.includes("Write the deliverable to `notes/out.md`"));
-    assert.ok(section?.includes("Name the file in your final message"));
-    assert.ok(section?.includes(`the parent reads it at \`${target}\``));
-    ok("phase 3 wiring: same-directory deliverable is granted and announced");
+    assert.equal(result.deliverable, "notes/out.md", "the short path comes back for the scope section");
+    ok("phase 3 wiring: same-directory deliverable is granted and the short path is returned");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -78,8 +76,7 @@ console.log("pi-subagents-extend role phase 3a wiring");
   try {
     const { main, worktree } = repoWithWorktree(dir);
     const policy = { absoluteWrite: [] as string[] };
-    const options: { sections?: Record<string, string> } = {};
-    const result = wireDeliverable(worktree, { output: { deliverable: "notes/out.md" } }, policy, options, () => {});
+    const result = wireDeliverable(worktree, { output: { deliverable: "notes/out.md" } }, policy, () => {});
     const target = deliverableTarget(main, "notes/out.md");
     assert.equal(result.link?.action, "created");
     assert.equal(result.link?.linkPath, join(worktree, "notes", "out.md"));
@@ -93,7 +90,7 @@ console.log("pi-subagents-extend role phase 3a wiring");
     );
     assert.ok(writable.includes(target), "bash can write the deliverable file");
     assert.ok(!writable.includes(dirname(target)), "bash cannot write the parent directory");
-    assert.ok(Object.values(options.sections ?? {})[0]?.includes(target));
+    assert.equal(result.deliverable, "notes/out.md", "the short path comes back for the scope section");
     ok("phase 3 wiring: worktree symlink points at the main file; only the file is granted");
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -106,7 +103,7 @@ console.log("pi-subagents-extend role phase 3a wiring");
   try {
     mkdirSync(dir, { recursive: true });
     const policy = { readOnly: true, absoluteWrite: [] as string[] };
-    wireDeliverable(dir, { output: { deliverable: "report.md" } }, policy, undefined, () => {});
+    wireDeliverable(dir, { output: { deliverable: "report.md" } }, policy, () => {});
     assert.deepEqual(policy.absoluteWrite, [deliverableTarget(dir, "report.md")]);
     ok("phase 3 wiring: readOnly still grants exactly the deliverable file");
   } finally {
@@ -123,7 +120,7 @@ console.log("pi-subagents-extend role phase 3a wiring");
     writeFileSync(file, "seed\n");
     const policy = { absoluteWrite: [] as string[] };
     const warnings: string[] = [];
-    const result = wireDeliverable(file, { output: { deliverable: "out.md" } }, policy, {}, (m) => warnings.push(m));
+    const result = wireDeliverable(file, { output: { deliverable: "out.md" } }, policy, (m) => warnings.push(m));
     assert.equal(result.link, undefined);
     assert.deepEqual(policy.absoluteWrite, []);
     assert.ok(warnings.some((m) => m.includes(file) && m.includes("not a directory")), warnings.join("\n"));
@@ -239,11 +236,10 @@ console.log("pi-subagents-extend role phase 3a wiring");
     mkdirSync(target, { recursive: true });
     writeFileSync(join(target, "keep.txt"), "keep\n");
     const policy = { writeGlobs: ["src"], absoluteWrite: [] as string[] };
-    const options: { sections?: Record<string, string> } = {};
     const warnings: string[] = [];
-    const result = wireDeliverable(dir, { output: { deliverable: "dist" } }, policy, options, (m) => warnings.push(m));
+    const result = wireDeliverable(dir, { output: { deliverable: "dist" } }, policy, (m) => warnings.push(m));
     assert.deepEqual(policy.absoluteWrite, [], "a directory gets no write grant");
-    assert.equal(Object.keys(options.sections ?? {}).length, 0, "no deliverable section is announced");
+    assert.equal(result.deliverable, undefined, "a refused deliverable is not announced to the child");
     const writable = sandboxWritableDirs(
       policy as never,
       dir,
@@ -253,7 +249,7 @@ console.log("pi-subagents-extend role phase 3a wiring");
     assert.ok(writable.includes(join(dir, "src")), "the task still has a write grant elsewhere");
     assert.ok(warnings.some((m) => m.includes(target) && m.includes("not a regular file")), warnings.join("\n"));
     assert.equal(result.target, target);
-    ok("phase 3 wiring: a directory deliverable is refused with no grant, section, or sandbox entry");
+    ok("phase 3 wiring: a directory deliverable is refused with no grant or sandbox entry");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -271,7 +267,7 @@ console.log("pi-subagents-extend role phase 3a wiring");
     symlinkSync(outsideFile, dangling, "file");
     const policy = { absoluteWrite: [] as string[] };
     const warnings: string[] = [];
-    wireDeliverable(dir, { output: { deliverable: "leak.txt" } }, policy, undefined, (m) => warnings.push(m));
+    wireDeliverable(dir, { output: { deliverable: "leak.txt" } }, policy, (m) => warnings.push(m));
     assert.deepEqual(policy.absoluteWrite, [], "a link gets no write grant");
     assert.equal(existsSync(outsideFile), false, "the outside file was not created");
     assert.equal(lstatSync(dangling).isSymbolicLink(), true, "the link is left untouched");
@@ -283,7 +279,7 @@ console.log("pi-subagents-extend role phase 3a wiring");
     writeFileSync(existing, "original\n");
     symlinkSync(existing, present, "file");
     const policy2 = { absoluteWrite: [] as string[] };
-    wireDeliverable(dir, { output: { deliverable: "leak2.txt" } }, policy2, undefined, () => {});
+    wireDeliverable(dir, { output: { deliverable: "leak2.txt" } }, policy2, () => {});
     assert.deepEqual(policy2.absoluteWrite, [], "a link to an existing file gets no grant");
     assert.equal(readFileSync(existing, "utf8"), "original\n", "the outside file was not modified");
     ok("phase 3 wiring: a linked deliverable is refused and the outside file is untouched");
@@ -305,11 +301,10 @@ console.log("pi-subagents-extend role phase 3a wiring");
     const requested = deliverableTarget(dir, deliverable);
     const resolved = join(realpathSync(outside), "reports", "review.md");
     const policy = { absoluteWrite: [] as string[] };
-    const options: { sections?: Record<string, string> } = {};
     const warnings: string[] = [];
-    const result = wireDeliverable(dir, { output: { deliverable } }, policy, options, (m) => warnings.push(m));
+    const result = wireDeliverable(dir, { output: { deliverable } }, policy, (m) => warnings.push(m));
     assert.deepEqual(policy.absoluteWrite, [], "a parent symlink must not grant an outside file");
-    assert.equal(Object.keys(options.sections ?? {}).length, 0, "no deliverable section is announced");
+    assert.equal(result.deliverable, undefined, "a refused deliverable is not announced to the child");
     assert.equal(existsSync(resolved), false, "the outside file was never created");
     assert.equal(result.target, requested);
     assert.ok(warnings.some((m) => m.includes(deliverable) && m.includes(resolved)), warnings.join("\n"));
@@ -329,7 +324,7 @@ console.log("pi-subagents-extend role phase 3a wiring");
     const target = deliverableTarget(main, deliverable);
     const policy = { absoluteWrite: [] as string[] };
     const warnings: string[] = [];
-    const result = wireDeliverable(worktree, { output: { deliverable } }, policy, undefined, (m) => warnings.push(m));
+    const result = wireDeliverable(worktree, { output: { deliverable } }, policy, (m) => warnings.push(m));
     assert.deepEqual(policy.absoluteWrite, [target], "the main-checkout file keeps its grant");
     assert.equal(result.target, target);
     assert.ok(existsSync(target), "the deliverable file was created in the main checkout");
@@ -366,24 +361,39 @@ console.log("pi-subagents-extend role phase 3a wiring");
   }
 }
 
-// 34. The deliverable section must use a pi-valid name and still carry both paths.
+// 34. The scope section must use a pi-valid name and still carry both paths.
 {
   const dir = temp("wire-section-name");
   try {
-    mkdirSync(dir, { recursive: true });
-    const policy = { absoluteWrite: [] as string[] };
-    const options: { sections?: Record<string, string> } = {};
-    wireDeliverable(dir, { output: { deliverable: "notes/out.md" } }, policy, options, () => {});
-    const keys = Object.keys(options.sections ?? {});
-    assert.deepEqual(keys, ["pi_subagents_extend_deliverable"], "the section is stored under the pi-valid name");
-    for (const key of keys) {
-      assert.match(key, /^[A-Za-z][A-Za-z0-9_]*$/, "pi rejects section names containing ':' or '-'");
+    const proj = join(dir, "main");
+    const home = join(dir, "home");
+    mkdirSync(join(proj, ".pi", "agents"), { recursive: true });
+    mkdirSync(home, { recursive: true });
+    writeFileSync(
+      join(proj, ".pi", "agents", "section-name.md"),
+      '---\nextend:\n  permissions:\n    scope: ["."]\n  output:\n    deliverable: notes/out.md\n---\n# section-name\n',
+    );
+    const options: PromptOptions = {};
+    const run = await childRun({
+      cwd: proj,
+      home,
+      systemPrompt: '<active_agent name="section-name"/>\nhello',
+      systemPromptOptions: options,
+    });
+    try {
+      const keys = Object.keys(options.sections ?? {});
+      assert.deepEqual(keys, ["pi_subagents_extend_scope"], "the scope section is stored under one pi-valid name");
+      for (const key of keys) {
+        assert.match(key, /^[A-Za-z][A-Za-z0-9_]*$/, "pi rejects section names containing ':' or '-'");
+      }
+      const section = (options.sections as unknown as Record<string, string> | undefined)?.pi_subagents_extend_scope ?? "";
+      assert.ok(section.includes("`notes/out.md`"), "the short deliverable path is named");
+      const target = deliverableTarget(proj, "notes/out.md");
+      assert.ok(section.includes(`the parent reads it at \`${target}\`.`), "the absolute target is named");
+      ok("phase 3 wiring: scope section has a pi-valid name and names both the short path and absolute target");
+    } finally {
+      run.restore();
     }
-    const section = options.sections?.pi_subagents_extend_deliverable ?? "";
-    assert.ok(section.includes("`notes/out.md`"), "the short deliverable path is named");
-    const target = deliverableTarget(dir, "notes/out.md");
-    assert.ok(section.includes(`\`${target}\``), "the absolute target is named");
-    ok("phase 3 wiring: deliverable section has a pi-valid name and names both the short path and absolute target");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
