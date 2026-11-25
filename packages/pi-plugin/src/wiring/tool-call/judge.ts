@@ -219,7 +219,7 @@ function reportWorktreeProblems(mdFile: string, problems: string[], warn: (messa
 	// 点名文件与键，并给出能直接照抄的写法：这几行决定派单建不建工作树，写错了不会报错，
 	// 只会不建 —— 调用方看到的是子代理在主检出里改文件。
 	warn(
-		`pi-subagents-extend: the worktree settings in ${mdFile} are ignored (${text}); the dispatch will not get a worktree. Write \`extend:\\n  worktree:\\n    enabled: true\` (or the shorthand \`extend:\\n  worktree: true\`) under \`extend:\`.`,
+		`pi-subagents-extend: the worktree settings in ${mdFile} are ignored (${text}); the dispatch will not get a worktree. The block is \`extend.worktree\` with \`enabled: true|false\` and, optionally, \`nodeModules: keep|remove\`.`,
 	);
 }
 

@@ -131,29 +131,34 @@ console.log("pi-subagents-extend role/deliverable/context unit")
   ok("permissions, worktree, setup and output all parse from one extend block")
 }
 
-// 4b. `worktree: true|false` 是 `{enabled: …}` 的简写。
-//     实测过的代价：只认对象时，写成布尔的那份配置被判「worktree must be an object」后
-//     静默丢掉，派单照旧不建工作树，而写的人完全看不出区别 —— 于是「md 里写了不生效、
-//     显式传参才生效」。简写必须真的生效，同时非布尔非对象仍要报错（别把错误也吞掉）。
+// 4b. `extend.worktree` 只认对象形式，与文档一致：布尔、字符串、数字都不是配置，
+//     报出来而不是猜。钉住这条是为了别再有人把「支持简写」当善意加回来 —— 它的代价是
+//     两套写法都要维护、文档和代码各说一套。
 {
-  const on = writeRoleMd(join(root, "wt-shorthand-on"), "wt-on", "  worktree: true\n")
-  const parsedOn = worktreeFromBlock(readExtendBlock(on).block ?? {})
-  assert.deepEqual(parsedOn.problems, [], "写 `worktree: true` 不是错误")
-  assert.equal(parsedOn.worktree?.enabled, true, "简写 true 必须真的打开工作树默认值")
-  assert.equal(parsedOn.worktree?.nodeModules, "keep", "简写不改变 nodeModules 的默认")
-
-  const off = writeRoleMd(join(root, "wt-shorthand-off"), "wt-off", "  worktree: false\n")
-  const parsedOff = worktreeFromBlock(readExtendBlock(off).block ?? {})
-  assert.equal(parsedOff.worktree?.enabled, false, "简写 false 明确关掉，不能靠缺席表达")
-
-  const bad = writeRoleMd(join(root, "wt-bad"), "wt-bad", '  worktree: "yes"\n')
-  const parsedBad = worktreeFromBlock(readExtendBlock(bad).block ?? {})
-  assert.equal(parsedBad.worktree, undefined, "非布尔也非对象时不给策略")
+  const shorthand = writeRoleMd(join(root, "wt-boolean"), "wt-boolean", "  worktree: true\n")
+  const parsedShort = worktreeFromBlock(readExtendBlock(shorthand).block ?? {})
+  assert.equal(parsedShort.worktree, undefined, "布尔不是配置，不给策略")
   assert.ok(
-    parsedBad.problems.some((problem) => /worktree must be an object/.test(problem)),
-    `仍然要报错，不能连错误一起吞掉：${JSON.stringify(parsedBad.problems)}`,
+    parsedShort.problems.some((problem) => /worktree must be an object/.test(problem)),
+    `布尔要报错：${JSON.stringify(parsedShort.problems)}`,
   )
-  ok("`worktree: true|false` 作为 enabled 的简写被接受，非法值仍然报错")
+
+  const badEnabled = writeRoleMd(join(root, "wt-enabled-bad"), "wt-enabled-bad", "  worktree:\n    enabled: \"yes\"\n")
+  const parsedBadEnabled = worktreeFromBlock(readExtendBlock(badEnabled).block ?? {})
+  assert.equal(parsedBadEnabled.worktree?.enabled, undefined, "enabled 不是布尔时不给值")
+  assert.ok(
+    parsedBadEnabled.problems.some((problem) => /worktree\.enabled must be a boolean/.test(problem)),
+    `enabled 的类型错误要报出来：${JSON.stringify(parsedBadEnabled.problems)}`,
+  )
+
+  const unknown = writeRoleMd(join(root, "wt-unknown-key"), "wt-unknown-key", "  worktree:\n    enabled: true\n    node_module: remove\n")
+  const parsedUnknown = worktreeFromBlock(readExtendBlock(unknown).block ?? {})
+  assert.deepEqual(parsedUnknown.worktree, { nodeModules: "keep", enabled: true }, "未知键不生效")
+  assert.ok(
+    parsedUnknown.problems.some((problem) => /worktree\.node_module: unknown key/.test(problem)),
+    `未知键要点名报出：${JSON.stringify(parsedUnknown.problems)}`,
+  )
+  ok("`extend.worktree` 只认对象；布尔、类型错误、未知键都报出来而不是被猜成某种含义")
 }
 
 // 5. A misspelled top-level block is reported, not quietly dropped.

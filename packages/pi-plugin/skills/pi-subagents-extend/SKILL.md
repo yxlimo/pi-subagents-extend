@@ -69,7 +69,8 @@ extend:
         - git checkout
         - git restore
         - rm -rf
-  worktree: true
+  worktree:
+    enabled: true
 ---
 
 <the role's body: what it owns, its boundaries, the gates it runs, what it must deliver>
