@@ -26,8 +26,6 @@ export interface BashRule {
 	allow: string[];
 	/** 允许网络（默认关闭，沙箱内使用私有网络命名空间）。 */
 	network: boolean;
-	/** scope 命中的目录在沙箱里可写（默认只读根）。 */
-	writable: boolean;
 	/**
 	 * 额外给予写权限的路径（绝对路径、`~` 开头或相对 cwd）。
 	 * pnpm store、mise 的 state 目录这类全局可写区，不在 scope 里，但工具链要写。
@@ -125,7 +123,6 @@ export function parseBashRule(raw: unknown): BashRule | undefined {
 	return {
 		allow,
 		network: cfg.network === true,
-		writable: cfg.writable === true,
 		writablePaths: stringList(cfg.writablePaths),
 		env: stringMap(cfg.env),
 		scratchPaths: cfg.scratchPaths === false ? false : stringList(cfg.scratchPaths),

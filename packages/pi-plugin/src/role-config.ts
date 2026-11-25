@@ -21,7 +21,6 @@ export const bindingKey = (): string => `${BINDING_NAMESPACE}/${BINDING_VERSION}
 export interface RoleBashPolicy {
 	allow?: string[];
 	deny?: string[];
-	writable?: boolean;
 	network?: boolean;
 }
 
@@ -323,17 +322,15 @@ export function policyFromBlock(block: Record<string, unknown>): { policy?: Role
 			if (allow) converted.allow = allow;
 			const deny = bashList("deny");
 			if (deny) converted.deny = deny;
-			for (const key of ["writable", "network"] as const) {
-				const value = bash[key];
-				if (value === undefined) continue;
-				if (typeof value !== "boolean") {
-					problems.push(`permissions.bash.${key} must be a boolean`);
-					continue;
-				}
-				converted[key] = value;
+			if (bash.network !== undefined) {
+				if (typeof bash.network === "boolean") converted.network = bash.network;
+				else problems.push("permissions.bash.network must be a boolean");
 			}
 			for (const key of Object.keys(bash)) {
-				if (!["allow", "deny", "writable", "network", "dependencyGate"].includes(key)) {
+				// `dependencyGate`（提交 b6fd8973）与 `writable` 对应的机制都已删除：写授权只看
+				// 目录配置（writeScope / writablePaths），bash 不再参与读写的判定。留着键名只会
+				// 让写的人以为它还在起作用，所以不在名单里就是 unknown key，报出来。
+				if (!["allow", "deny", "network"].includes(key)) {
 					problems.push(`permissions.bash.${key}: unknown key`);
 				}
 			}
