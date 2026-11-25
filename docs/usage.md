@@ -201,7 +201,7 @@ The whole tree readable and writable, with publishing reserved to the parent.
   "scope": ["."],
   "writeScope": ["."],
   "bash": {
-    "allow": ["git status", "git diff", "git log", "ls", "rg", "cat", "node", "sh", "pnpm", "cargo", "mkdir", "cp", "mv", "rm", "touch", "git add", "git switch", "git stash"],
+    "allow": ["git status", "git diff", "git log", "ls", "rg", "cat", "node", "pnpm", "cargo", "mkdir", "cp", "mv", "rm", "touch", "git add", "git switch", "git stash"],
     "deny": ["git commit", "git push", "git rebase", "git merge", "git reset", "git clean", "rm -rf"]
   }
 }
@@ -210,12 +210,13 @@ The whole tree readable and writable, with publishing reserved to the parent.
 `git commit` is in `deny` rather than simply left out of `write`, so no dispatch can re-allow it —
 that is what a deny list is for, and it is the one part of the role md a caller cannot override.
 
-What it matches is the command text, and that is a limit worth naming here: this example allows `sh` and
-`node`, so `sh -c "git commit -m x"` and `node -e "…"` are not a `git commit` segment and the entry
-never fires. The deny list closes the everyday slip — the command the model writes out of habit — not a
-determined detour, and behind it stands the write grant and Landlock. If committing must be *impossible*
-rather than merely unlikely, leave the interpreters out of `allow` (a task that needs them loses the
-floor); leaving them in means the floor is advice.
+What it matches is the command text, so the list has to be read together with what it lets through. `node`
+is there because the suites are TypeScript and are run directly with it; `node -e "…"` is not a
+`git commit` segment, so against that one the floor is advice, and the write grant is what actually
+holds. `sh` and `bash` are deliberately **absent**: a shell makes the whole allowlist optional, because
+`sh -c "<anything>"` is a single allowed command whose contents the judge never sees. A shell is never
+needed for a sequence either — that belongs in `setup.preExec` or in a repository script, both of which
+run outside the sandbox and are the parent's decision, not the child's.
 
 ### A read-only researcher
 
