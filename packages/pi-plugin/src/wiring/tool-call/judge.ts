@@ -2,7 +2,7 @@ import type { ExtensionAPI, ExtensionContext, ToolCallEvent, ToolCallEventResult
 import { homedir } from "node:os";
 import { readFileSync } from "node:fs";
 import { parse } from "yaml";
-import { allEntries, commandMatches, deniedEntry, deniedEnvAssignment, pathCandidates, requiresNetwork, type BashRule } from "../../bash/index.ts";
+import { allEntries, commandMatches, deniedEntry, deniedEnvAssignment, pathCandidates, requiresNetwork, splitCommandSegments, type BashRule } from "../../bash/index.ts";
 import { dispatchToolFaceRefusal, headEntriesHint, warnUnresolvedAgentName, warnUntrackedWorktreeProfile } from "../../notices.ts";
 import { STOP_NOTICE } from "../../probe.ts";
 import { shouldDefaultWorktree, WORKTREE_TOOLS } from "../../worktree-default.ts";
@@ -81,52 +81,6 @@ export const SAFE_TOOLS = ["structured_output", "contact_supervisor", "intercom"
  *   归零之外是同一个道理，所以这里开第三个名单而不是往 SAFE_TOOLS 里加一员。
  */
 export const RUNTIME_TOOLS = ["todo"];
-
-/**
- * 命令里是否有**未加引号**的 shell 控制字符。
- *
- * 命令最终以 `bash -lc <command>` 执行，所以引号语义就是 bash 的语义：
- * 单引号内一切惰性；双引号内只有 `$`、反引号、反斜杠仍会展开，`; & | < > ( )`
- * 都是普通字符。之前是纯文本正则匹配，于是 `python3 -c "print(1)"` 这种引号内的
- * 括号也被拒——dogfooding 时一个子代理因此无法自验 YAML。
- *
- * 不进引号的正斜杠也一律拒；引号闭合不对（子代理手写错）也拒，交给它重写。
- */
-export function hasUnquotedShellControl(command: string): boolean {
-	let quote: '"' | "'" | undefined;
-	for (let i = 0; i < command.length; i += 1) {
-		const ch = command[i];
-		if (quote === "'") {
-			if (ch === "'") quote = undefined;
-			continue;
-		}
-		if (quote === '"') {
-			// 双引号内反斜杠仍会转义，跳过后一个字符（保守：当成惰性）
-			if (ch === "\\") {
-				i += 1;
-				continue;
-			}
-			if (ch === '"') {
-				quote = undefined;
-				continue;
-			}
-			if (ch === "$" || ch === "`") return true;
-			continue;
-		}
-		if (ch === "'") {
-			quote = "'";
-			continue;
-		}
-		if (ch === '"') {
-			quote = '"';
-			continue;
-		}
-		if (ch === "\\" || ch === "\n" || ch === "\r") return true;
-		if (";&|<>()`$".includes(ch)) return true;
-	}
-	// 引号没闭合：命令本身是坏的，直接拒
-	return quote !== undefined;
-}
 
 /**
  * 只读类 bash 命令的参数路径可以指向、且无需再解释的系统目录：设备与系统信息，不是工具。
@@ -431,7 +385,7 @@ export const judgeToolCall = async ({
 	//         工具不在 allowTools、整个 bash 被关。这些是「授权与任务不匹配」的信号。
 	//   写不了 → 写预算（writeBail）：写范围外、readOnly 会话里的写。放宽授权也解决不了，
 	//          正解是改成交报告，所以计数与文案都跟授权那类分开。
-	//   不能 → 只拒不计（deny）：用法错误（缺 path、空命令、shell 元字符）、
+	//   不能 → 只拒不计（deny）：用法错误（缺 path、空命令、命令替换这类判不到的写法）、
 	//          bash deny 的硬禁令、永远不开放的工具、环境/内核缺能力。
 	// 把后一类算进预算，会让一次参数写错就提前判死长任务。
 
@@ -450,30 +404,41 @@ export const judgeToolCall = async ({
 			);
 		}
 		if (!command) return deny("pi-subagents-extend: empty bash command");
-		// 禁止列表先于一切判定：deny 是硬底线（两层并集，任何一层都拆不掉），
-		// 调用方的白名单不能放宽它。它不属于哪一层配置文件，来源只在 (source: …) 里。
-		const forbidden = deniedEntry(rule, command);
-		if (forbidden) {
+		// 连接符（`&&`、`||`、`|`、`|&`、`;`）不是危险写法：命令按段切开，每一段都是独立
+		// 的一条命令，逐段过 deny 与白名单。拒连接符只会让子代理把同一件事拆成多次调用，
+		// 白花 token。真正无法逐段判定的是命令替换 / 子 shell / 后台 / heredoc：它们会在
+		// 判定看不见的地方再跑一条命令，整条拒掉。
+		const { segments, danger } = splitCommandSegments(command);
+		if (danger) {
 			return deny(
-				`pi-subagents-extend: command blocked by a deny entry: "${forbidden}" (source: ${w.policy.source}). A deny entry is a restriction; no layer can remove it.`,
+				`pi-subagents-extend: ${danger} is not allowed — it runs a command the allowlist never sees. Refused: ${preview([command])} — allowed: ${preview(allEntries(rule))}`,
 			);
 		}
-		if (hasUnquotedShellControl(command)) {
-			return deny(
-				`pi-subagents-extend: shell metacharacters are not allowed (; & | < > \` $ …): run one allowlisted command. Refused: ${preview([command])} — allowed: ${preview(allEntries(rule))}`,
-			);
+		// 只有连接符（`;`、`&&`）时切不出任何段：没有任何一条命令可判，别让它一路走到 spawn。
+		if (segments.length === 0) return deny("pi-subagents-extend: empty bash command");
+		// deny 是硬底线（两层并集，任何一层都拆不掉），所以先查，并且逐段查：
+		// `git status && git commit` 的第二段同样命中 deny。
+		for (const segment of segments) {
+			const forbidden = deniedEntry(rule, segment);
+			if (forbidden) {
+				return deny(
+					`pi-subagents-extend: command blocked by a deny entry: "${forbidden}" in "${preview([segment])}" (source: ${w.policy.source}). A deny entry is a restriction; no layer can remove it.`,
+				);
+			}
 		}
 		// 前置赋值能把「被允许的命令」变成「跑我自己的代码」：`NODE_OPTIONS=--require=/tmp/x.js node`
 		// 实测直接执行 /tmp/x.js，`GIT_EXTERNAL_DIFF` 对 git 同理。已知入口一律拒并点名；
 		// 其余名字照常剥离放行（这一层是辅助上轨道，不是严格沙箱 —— 放行多了可以事后补）。
-		const deniedEnv = deniedEnvAssignment(command);
-		if (deniedEnv) {
-			return deny(
-				`pi-subagents-extend: bash refused: the leading assignment "${deniedEnv}=…" can change which program runs or load code into it, which would let an allowlisted command run arbitrary code. Drop it, or have the parent set it in bash.env. Refused: ${preview([command])}`,
-			);
+		for (const segment of segments) {
+			const deniedEnv = deniedEnvAssignment(segment);
+			if (deniedEnv) {
+				return deny(
+					`pi-subagents-extend: bash refused: the leading assignment "${deniedEnv}=…" can change which program runs or load code into it, which would let an allowlisted command run arbitrary code. Drop it, or have the parent set it in bash.env. Refused: ${preview([segment])}`,
+				);
+			}
 		}
-		const allowed = rule.allow.some((entry) => commandMatches(entry, command));
-		if (!allowed) {
+		for (const segment of segments) {
+			if (rule.allow.some((entry) => commandMatches(entry, segment))) continue;
 			// 模型能看见这段文案，所以把它需要的路径直接写进去，省得它再猜。
 			const store = detectPnpmStore(cwd);
 			const storeHint = store.path
@@ -482,17 +447,21 @@ export const judgeToolCall = async ({
 			// 点名被拒的**命令**，再列允许项。只印允许列表时，读起来像「列表里那条命令不被接受」：
 			// 实测真有人把 `command not in the allowlist: ls` 读成「ls 被拒」，而实际拒的是别的命令。
 			// 同首 token 的条目：让子代理知道**为什么**没匹配上、该改哪里。
-			const headHint = headEntriesHint(rule, command, cwd);
+			const headHint = headEntriesHint(rule, segment, cwd);
+			// 复合命令要说出是哪一段被拒，否则子代理会以为整条都在白名单里。
+			const where = segments.length > 1 ? ` (the segment "${preview([segment])}" of "${preview([command])}")` : "";
 			return bail(
 				w,
-				`pi-subagents-extend: command not in the allowlist: "${preview([command])}" — allowed: ${preview(allEntries(rule))} (source: ${w.policy.source})${storeHint}${headHint}`,
+				`pi-subagents-extend: command not in the allowlist: "${preview([segment])}"${where} — allowed: ${preview(allEntries(rule))} (source: ${w.policy.source})${storeHint}${headHint}`,
 			);
 		}
 		// 参数里的路径：沙箱读面是 `/`（工具链要读 /nix/store），所以路径引导放在插件层。
-		// 位置在元字符与注入型赋值之后：前两条决定「这条命令能不能跑」，这一条只是把参数里的
-		// 路径引回范围。写不写不由这里判 —— 写不出去会被 Landlock 拦，那是内核给的答案。
-		const foreign = foreignBashPath(command, cwd, rule, w.policy);
-		if (foreign) {
+		// 位置在分段、deny 与注入型赋值之后：那几步决定「这条命令能不能跑」，这一步只是把参数
+		// 里的路径引回范围。写不写不由这里判 —— 写不出去会被 Landlock 拦，那是内核给的答案。
+		// 逐段查：`rg x /etc && cat ../outside` 的第二段同样要看。
+		for (const segment of segments) {
+			const foreign = foreignBashPath(segment, cwd, rule, w.policy);
+			if (!foreign) continue;
 			// 计入撞权限预算（bail）：父代理放宽范围就能解决，正是这一类。
 			return bail(
 				w,
@@ -503,8 +472,9 @@ export const judgeToolCall = async ({
 		// 事后注解等不到触发文本，只能挂到超时。所以在 spawn 之前按名单拒掉确定要往返的
 		// 工具；名单只收确定项，拿不准的一律放行（引导，不是沙箱边界）。
 		if (rule.network !== true) {
-			const networkTool = requiresNetwork(command);
-			if (networkTool) {
+			for (const segment of segments) {
+				const networkTool = requiresNetwork(segment);
+				if (!networkTool) continue;
 				return bail(
 					w,
 					`pi-subagents-extend: the network is off per the parent's bindings — a permission, not a broken machine. \`${networkTool}\` would hang here rather than fail (packets are dropped, not refused). Ask the parent via contact_supervisor for "network": true.\n(source: ${w.policy.source})`,

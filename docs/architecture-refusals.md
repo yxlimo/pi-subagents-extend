@@ -231,7 +231,8 @@ way out is a report, not an escalation. A single out-of-scope read therefore doe
 refusal towards a stop, and the refusal says so — it names the write scope (or the read-only mode)
 and points at the report.
 
-Usage errors and hard rules never count: a missing path, shell metacharacters, an empty command,
+Usage errors and hard rules never count: a missing path, a construct that runs a command the judge never
+sees (command substitution, a subshell, a background job, a heredoc), an empty command,
 `powershell`/`codemode`, or a command matched by the role md's `bash.deny`. Those cannot be fixed by
 granting more, so charging them against the budget would stop a task for the wrong reason.
 

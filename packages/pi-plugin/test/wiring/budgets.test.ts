@@ -14,8 +14,9 @@ import type { Outcome } from "../types.ts"
 import { handler, specOf, fakeClock, defaultProbe, workdir, repo } from "../harness.ts"
 
 // 33. 撞权限只统计「父代理放宽授权或调整设置能解决」的拒绝。
-//     用法错误（元字符、缺 path）与硬规则（永久不开放的工具、profile 禁令）不消耗预算，
-//     否则一次参数写错就能把长任务提前判死（现场：4 次计数里 1 次是 `cd X && git status`）。
+//     用法错误（命令替换这类无法逐段判定的写法、缺 path）与硬规则（永久不开放的工具、
+//     profile 禁令）不消耗预算，否则一次参数写错就能把长任务提前判死。连接符不算用法错误：
+//     `a && b` 逐段判定，第二段不在白名单里照常计数（那正是父代理放宽授权能解决的）。
 {
   const h = await handler({
     bindings: JSON.stringify({
@@ -26,9 +27,11 @@ import { handler, specOf, fakeClock, defaultProbe, workdir, repo } from "../harn
 
   // (a) 用法错误：shell 元字符，连撞 4 次也不该推进计数。
   for (let i = 0; i < 4; i += 1) {
-    const r = await h.call("bash", { command: `pnpm run typecheck && echo ${i}` })
-    assert.equal(r?.block, true, "a metacharacter command is refused")
-    assert.equal(counted(r.reason), false, `metacharacters do not feed the counter (call ${i + 1})`)
+    // 命令替换是用法错误（不是「授权不够」）：整条拒，且不推进计数。
+    // 连接符不是这一类 —— `a && b` 是逐段判定，第二段不在白名单里会照常计数。
+    const r = await h.call("bash", { command: `pnpm run typecheck $(echo ${i})` })
+    assert.equal(r?.block, true, "a command substitution is refused")
+    assert.equal(counted(r.reason), false, `usage errors do not feed the counter (call ${i + 1})`)
   }
 
   // (b) 硬规则：范围放多宽都不会开放的工具。

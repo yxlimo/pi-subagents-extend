@@ -101,6 +101,11 @@ function writeAgentMdRaw({ cwd, role, frontmatter }: { cwd: string; role: string
   assert.ok(refused && refused.block, "a deny entry blocks the command")
   assert.match(refused.reason, /command blocked by a deny entry/, `the refusal names a deny entry, got: ${refused.reason}`)
   assert.match(refused.reason, /"git stash"/, `the refusal quotes the deny entry, got: ${refused.reason}`)
+  // 逐段查 deny：复合命令的第二段同样命中 deny，而且这属于硬规则 —— 不推进撞权限计数。
+  const compound = await h.call("bash", { command: "git diff && git stash" })
+  assert.ok(compound && compound.block, "the second segment is checked against deny too")
+  assert.match(compound.reason, /command blocked by a deny entry/, `a denied segment is refused as a deny, got: ${compound.reason}`)
+  assert.match(compound.reason, /"git stash"/, "the refusal names the denied entry, not the whole line")
   h.restore()
   console.log("  ok   the deny refusal names a deny entry and quotes it")
 }

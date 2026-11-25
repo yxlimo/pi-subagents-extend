@@ -182,9 +182,11 @@ The report is longer than a reply can carry, and a reviewer that cannot write ha
 
 The grant is the path, not the name: `read` / `write` / the host's edit family are judged by the scopes
 *before* `allowTools` is consulted, so listing `write` there neither authorises nor restricts it — the
-example lists it only because a reader otherwise wonders. Bash redirection (`>`, `>>`) is refused by the
-metacharacter rule regardless, which is deliberate: the report goes through the `write` tool, where the
-path can be judged.
+example lists it only because a reader otherwise wonders. Bash redirection (`>`, `>>`) is not refused by
+the command judge — the redirect stays inside its segment — so `rg foo > report.md` runs and the write
+itself is decided by the write grant: under `readOnly` the kernel refuses it, and the failed result says
+`[sandbox] … is outside the writes the parent granted`. The report still belongs in the `write` tool,
+where the path is judged before anything runs.
 
 That ordering has one consequence worth knowing: a tool this layer does not recognise is *not* judged by
 the scopes, so allowlisting a **new** write tool (a plugin's own edit tool) allows it unjudged. Declare
@@ -241,8 +243,9 @@ applies, and the two differ:
 - **A grant refusal** (path outside `scope`, a command not in the list, `allowTools`) is charged to
   `maxDenies`, and `contact_supervisor` is the way to ask for it.
 
-Neither counts usage errors — a missing path, a shell metacharacter, an empty command — so a
-malformed call never spends the budget.
+Neither counts usage errors — a missing path, command substitution or another construct that runs a
+command the judge never sees, an empty command — so a malformed call never spends the budget. A compound
+whose second segment is merely not listed *does* spend it: that is a grant mismatch the parent can fix.
 
 ## Role defaults
 

@@ -182,9 +182,10 @@ import { described, testState } from "../support.ts"
 }
 
 
-// 56. 元字符判定要看引号：命令最终以 `bash -lc <command>` 执行，单引号内一切惰性，
-//      双引号内只有 $ / 反引号 / 反斜杠仍展开。纯文本匹配会连引号内的括号一起拒，
-//      dogfooding 时一个子代理因此无法自验 YAML（python3 -c "print(1)" 被拒）。
+// 56. 命令按连接符逐段判定，引号语义按 bash（命令最终以 `bash -lc <command>` 执行）：
+//      单引号内一切惰性，双引号内只有 $ / 反引号 / 反斜杠仍展开。连接符（&&、||、|、;）
+//      不是危险写法 —— 每一段都要过 deny 与白名单；无法逐段判定的（命令替换、子 shell、
+//      后台、heredoc）仍整条拒。
 {
   const h = await handler({
     bindings: JSON.stringify({
@@ -197,7 +198,7 @@ import { described, testState } from "../support.ts"
   const refused = async (command: string, why: string): Promise<void> => {
     const r = await h.call("bash", { command })
     assert.equal(r?.block, true, why)
-    assert.match(r.reason, /metacharacters/, `${why} (names the cause)`)
+    assert.match(r.reason, /never sees/, `${why} (names the cause: a command the allowlist never sees)`)
   }
 
   // 引号内的控制字符是普通字符，不该被拒
@@ -209,15 +210,33 @@ import { described, testState } from "../support.ts"
   // 沙箱边界是 Landlock 与命名空间，不是命令文本；解释器能不能用由 profile 决定。
   await allowed("python3 -c 'import os; os.system(\"id\")'", "single quotes are inert even for an interpreter")
 
-  // 引号外的一律拒
-  await refused("echo a; b", "an unquoted semicolon is refused")
-  await refused("echo a && b", "an unquoted && is refused")
+  // 连接符按段判定：每一段都在白名单里就放行（`echo` 与 `node` 都在）
+  await allowed("echo a && echo b", "a && -joined pair of allowed segments runs")
+  await allowed("echo a || echo b", "a || -joined pair of allowed segments runs")
+  await allowed("echo a | node", "a pipeline of two allowed segments runs")
+  await allowed("echo a; echo b", "a ;-joined pair of allowed segments runs")
+  await allowed("echo a 2>/dev/null", "a stderr redirect is not a second command")
+  await allowed("node --version > /dev/null", "an output redirect to a discarded device is not a second command")
+
+  // 第二段不在白名单里：整条拒，并且点名是哪一段（否则子代理以为整条都允许）
+  const second = await h.call("bash", { command: "echo a && cat /etc/passwd" })
+  assert.equal(second?.block, true, "a compound whose second segment is unlisted is refused")
+  assert.match(second.reason, /not in the allowlist/, "the refusal says the allowlist is the reason")
+  assert.match(second.reason, /cat \/etc\/passwd/, "the refusal names the offending segment")
+
+  // 无法逐段判定的写法仍整条拒
   await refused("echo $(id)", "command substitution is refused")
   await refused('echo "x$(id)"', "command substitution expands inside double quotes too")
   await refused("echo `id`", "a backtick is refused")
+  await refused("echo (id)", "a subshell is refused")
+  await refused("echo a & echo b", "a background job is refused")
   await refused('echo "unclosed', "an unterminated quote is refused")
+  // 只有连接符时切不出任何段：没有任何一条命令可判，按空命令拒（别放行到 spawn）
+  const onlyConnectors = await h.call("bash", { command: " ; " })
+  assert.equal(onlyConnectors?.block, true, "a command made only of connectors is refused")
+  assert.match(onlyConnectors.reason, /empty bash command/, "it is refused as an empty command")
   h.restore()
-  console.log("  ok   元字符判定看引号：引号内惰性放行，引号外与命令替换一律拒")
+  console.log("  ok   连接符逐段判定：每段都在白名单内放行，命令替换等无法分段的一律拒")
 }
 
 // 57. 打转判据是「同一件事没有进展地重复」：写活动就是进展，计数清零、已发出的 warn 撤掉。

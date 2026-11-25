@@ -54,7 +54,6 @@ export { dropHiddenGrants, findWorktreeRoot, privatisedDirs, resolveComparable }
 export { sortedEntries, sortByName } from "./dependencies.ts";
 export { buildSpec, detectPnpmStore, describeHelper, helperCandidates, sandboxWritableDirs, wrapInSandbox, type HelperCapabilities } from "./sandbox/index.ts";
 export { nodeModulesWriteHint, wireDeliverable, wirePreExec, wireWorktree } from "./wiring/agent-start.ts";
-export { hasUnquotedShellControl } from "./wiring/tool-call/judge.ts";
 
 /**
  * /permission 的 allow 列。写不写由目录授权决定，与「命令在不在白名单」无关，

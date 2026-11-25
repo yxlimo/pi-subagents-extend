@@ -190,9 +190,13 @@ import { restoreState } from "../support.ts"
   assert.match(denied.reason, /not in the allowlist/)
   assert.equal(other.command, "pnpm publish", "denied command is left untouched")
 
-  const inject = { command: "pnpm test; cat /etc/passwd" }
+  // 连接符逐段判定：两段都在白名单里就放行，第二段不在就整条拒并点名那一段。
+  assert.equal(await h.call("bash", { command: "git status && cat src/a.ts" }), undefined, "a compound of two listed segments runs")
+
+  const inject = { command: "git status; cat /etc/passwd" }
   const meta = await h.call("bash", inject)
-  assert.equal(meta?.block, true, "shell metacharacters are rejected even behind a listed prefix")
+  assert.equal(meta?.block, true, "a compound whose second segment is unlisted is refused")
+  assert.match(meta.reason, /cat \/etc\/passwd/, "the refusal names the offending segment")
 
   const powershell = await h.call("powershell", { command: "dir" })
   assert.equal(powershell?.block, true, "powershell stays denied")
@@ -270,11 +274,11 @@ import { restoreState } from "../support.ts"
     const denied = await h.call("bash", { command })
     assert.equal(denied?.block, true, `"${command}" is denied`)
   }
-  // A regex cannot smuggle a second command: metacharacters are still rejected first.
-  const metachars = await h.call("bash", { command: "tsc --noEmit && cat /etc/passwd" })
-  assert.equal(metachars?.block, true, "metacharacters win over regex")
+  // 连接符不会让正则条目多放行一段：第二段仍要自己有匹配的条目。
+  const compound = await h.call("bash", { command: "tsc --noEmit && cat /etc/passwd" })
+  assert.equal(compound?.block, true, "the second segment is judged on its own, not covered by the first")
   h.restore()
-  console.log("  ok   bash 白名单支持字面量前缀与 re: 正则，元字符仍先拒")
+  console.log("  ok   bash 白名单支持字面量前缀与 re: 正则；复合命令逐段判定")
 }
 
 

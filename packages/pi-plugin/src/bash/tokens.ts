@@ -14,7 +14,7 @@ export function tokens(text: string): string[] {
 /**
  * 把命令切成参数，按 bash 的引号语义。
  *
- * 与 index.ts 的 `hasUnquotedShellControl` 是同一套扫描规则，但**保留引号字符本身**：
+ * 与 `splitCommandSegments` 同一套引号规则，区别是这里**保留引号字符本身**：
  * 下游把「含引号」当作「这段是代码或字面量，不是路径」的直接信号，剥掉反而要多猜一次。
  * 空白只在引号之外切词，所以 `-e 'require("x")'` 是两个 token，不是一个。
  */
@@ -31,7 +31,7 @@ export function shellTokens(command: string): string[] {
 		}
 		if (quote === '"') {
 			current += ch;
-			// 双引号内反斜杠仍会转义，跳过后一个字符（与 hasUnquotedShellControl 一致）
+			// 双引号内反斜杠仍会转义，跳过后一个字符（与 splitCommandSegments 一致）
 			if (ch === "\\" && i + 1 < command.length) {
 				current += command[i + 1] as string;
 				i += 1;
@@ -54,7 +54,7 @@ export function shellTokens(command: string): string[] {
 		}
 		current += ch;
 	}
-	// 引号没闭合时前半句照常返回：那种命令会被元字符检查先拒掉，这里不必再判一次。
+	// 引号没闭合时前半句照常返回：那种命令会被整条拒掉（unbalanced quote），这里不必再判一次。
 	if (current) out.push(current);
 	return out;
 }
@@ -123,14 +123,35 @@ export function pathCandidates(command: string): string[] {
 }
 
 /**
- * 按 shell 控制符切段；引号内与反斜杠转义的字符不当分隔符。
+ * 一条命令按连接符切成的若干段，以及无法逐段判定的写法。
+ *
+ * `&&`、`||`、`|`、`|&`、`;` 是**连接符**，不是危险写法：每一段都是独立的一条命令，
+ * 逐段过 deny 与白名单，等于把「一条命令」的判据原样套到每一段上。拒连接符本身只会让
+ * 子代理把 `a && b` 拆成两次调用 —— 白花 token，还多一次上下文往返。
+ *
+ * 真正不能带进判定的是会在判定看不见的地方再跑一条命令的写法：命令替换、子 shell、后台
+ * 任务、heredoc。它们没有「段」可判，整条拒掉，不做猜测。
+ *
+ * 引号内的字符一律不当分隔符；引号字符本身保留在段里（下游把「含引号」当作字面量信号）。
  */
-export function commandSegments(command: string): string[] {
-	const out: string[] = [];
+export interface CommandSegments {
+	segments: string[];
+	/** 非空表示这条命令无法逐段判定；`danger` 是给子代理看的原因。 */
+	danger?: string;
+}
+
+export function splitCommandSegments(command: string): CommandSegments {
+	const segments: string[] = [];
 	let current = "";
 	let quote: "'" | '"' | undefined;
+	const flush = (): void => {
+		const trimmed = current.trim();
+		if (trimmed) segments.push(trimmed);
+		current = "";
+	};
 	for (let i = 0; i < command.length; i += 1) {
 		const ch = command[i] as string;
+		const next = command[i + 1];
 		if (quote === "'") {
 			current += ch;
 			if (ch === "'") quote = undefined;
@@ -138,12 +159,13 @@ export function commandSegments(command: string): string[] {
 		}
 		if (quote === '"') {
 			current += ch;
-			if (ch === "\\" && i + 1 < command.length) {
-				current += command[i + 1] as string;
+			if (ch === "\\" && next !== undefined) {
+				current += next;
 				i += 1;
 				continue;
 			}
 			if (ch === '"') quote = undefined;
+			else if (ch === "$" || ch === "`") return { segments, danger: "command substitution inside double quotes" };
 			continue;
 		}
 		if (ch === "'" || ch === '"') {
@@ -151,19 +173,41 @@ export function commandSegments(command: string): string[] {
 			current += ch;
 			continue;
 		}
-		if (ch === "\\" && i + 1 < command.length) {
-			current += ch + (command[i + 1] as string);
-			i += 1;
+		if (ch === "\\") return { segments, danger: "a backslash escape" };
+		if (ch === "\n" || ch === "\r") return { segments, danger: "a line break" };
+		if (ch === "$" || ch === "`") return { segments, danger: "command substitution" };
+		if (ch === "(" || ch === ")") return { segments, danger: "a subshell" };
+		if (ch === "&") {
+			if (next === "&") {
+				flush();
+				i += 1;
+				continue;
+			}
+			// `2>&1` 这类 fd 复制是重定向的一部分，不是后台任务。
+			if (command[i - 1] === ">" || command[i - 1] === "<") {
+				current += ch;
+				continue;
+			}
+			return { segments, danger: "a background job (&)" };
+		}
+		if (ch === "|") {
+			flush();
+			if (next === "|" || next === "&") i += 1;
 			continue;
 		}
-		if (ch === ";" || ch === "|" || ch === "\n" || ch === "&") {
-			out.push(current);
-			current = "";
-			if (ch === "&" && command[i + 1] === "&") i += 1;
+		if (ch === ";") {
+			flush();
 			continue;
 		}
+		if (ch === "<" && next === "<") return { segments, danger: "a heredoc" };
 		current += ch;
 	}
-	out.push(current);
-	return out.map((segment) => segment.trim()).filter((segment) => segment !== "");
+	if (quote) return { segments, danger: "an unbalanced quote" };
+	flush();
+	return { segments };
+}
+
+/** 只要段，不管危险写法：路径候选是尽力而为的引导，不需要因此整条放弃。 */
+export function commandSegments(command: string): string[] {
+	return splitCommandSegments(command).segments;
 }

@@ -7,7 +7,14 @@
 
 export { deniedEnvAssignment, leadingAssignments, type LeadingAssignments } from "./env.ts";
 export { requiresNetwork } from "./network.ts";
-export { commandSegments, pathCandidates, shellTokens, tokens } from "./tokens.ts";
+export {
+	commandSegments,
+	pathCandidates,
+	shellTokens,
+	splitCommandSegments,
+	tokens,
+	type CommandSegments,
+} from "./tokens.ts";
 export {
 	allEntries,
 	commandMatches,
