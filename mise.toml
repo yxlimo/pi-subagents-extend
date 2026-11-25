@@ -45,9 +45,6 @@ for f in packages/pi-plugin/test/docs/*.test.ts; do node "$f" || exit 1; done
 """
 
 
-[tasks."verify:install"]
-description = "Install from npm into an empty agent dir and check what landed (needs network; run after a release)"
-run = "node scripts/verify-install.mjs"
 
 # --- 区域任务：一个区域一个目录，加文件不用改这里 ---
 #
