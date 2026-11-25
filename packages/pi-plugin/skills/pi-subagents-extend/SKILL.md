@@ -50,6 +50,12 @@ thinking: medium
 systemPromptMode: append
 # subagentOnlyExtensions: — only if you dispatch async: false, see below
 extend:
+  # Runs in the child session BEFORE the sandbox is applied — the only moment
+  # dependencies can be installed, because a fresh worktree holds tracked files
+  # only and the sandbox has no network. See Step 2b; skipping it is what makes a
+  # task sit there for half an hour with nothing on stdout.
+  setup:
+    preExec: pnpm install --frozen-lockfile
   permissions:
     scope: ["lib/router/**", "lib/session-id.ts"]
     write: ["lib/router/**"]
@@ -90,6 +96,44 @@ Leave `tools:` out and this extension bounds the child instead: path tools are j
 
 **`subagentOnlyExtensions:` — only for foreground dispatches.** Value is the absolute path of the loaded entry, e.g. `~/.pi/agent/npm/node_modules/pi-subagents-extend/src/index.ts` written out in full (no `~`). It names the *installed* copy on purpose: the same file ambient already loads for background children. When both copies do end up in one session, this extension registers once per session, so the second copy is inert rather than a second judge.
 
+
+## Step 2b: install dependencies in `setup.preExec`
+
+`setup.preExec` runs in the child session **before the sandbox is applied**, which makes it the only
+place dependencies can come from. A fresh worktree carries tracked files only. pi-subagents links the
+repository root's `node_modules` into it, so a single-package repo is usually fine — but a workspace
+package's own `node_modules` (what `pnpm run` in `web/`, `packages/ui/` … checks) is not there.
+
+Skipping the prepare step does not fail. It hangs. Measured in a real worktree of a pnpm workspace,
+with `mise run test:web` allowlisted:
+
+```text
+mise run test:web
+ └─ mise run web:typecheck
+     └─ pnpm run typecheck
+         └─ pnpm install --verify-deps-before-run-install   ← sits here
+```
+
+pnpm decides the dependencies are stale, tries to install them, fails DNS per package and retries
+**after one minute each** — thirty minutes with nothing on stdout, and the child reports nothing
+because nothing has failed yet. Tool-side switches do not rescue it: `MISE_OFFLINE=1`,
+`npm_config_offline=true`, `npm_config_fetch_retries=0` and
+`npm_config_verify_deps_before_run_install=false` were each measured against that hang, and each one
+still hung. The network is gone and the tool will keep asking for it, so the dependencies have to be
+on disk before the sandbox comes up.
+
+| Repository | `setup.preExec` |
+| --- | --- |
+| pnpm workspace | `pnpm install --frozen-lockfile` |
+| npm / yarn | `npm ci` or `yarn install --frozen-lockfile` |
+| pins its toolchain with mise | `mise install && pnpm install --frozen-lockfile` — mise's own downloads need the network too, and it resolves them on every invocation |
+| dependencies already exist in the main checkout | symlink them rather than re-install: one `ln -s` per `node_modules` tree, which is faster and works with no network at all |
+
+It runs once per session, so this is paid once, and its output goes to the child's session — a failed
+install is visible instead of silent. Two limits: preExec runs unsandboxed, so keep it to bootstrap
+commands and not the task itself; and anything that must download at *run* time (a package manager in
+`bash.allow`, an e2e suite that fetches a browser) needs `bash.network: true`, because by then the
+sandbox is up and the network is gone.
 ## Step 3: the permission block, field by field
 
 Everything lives under `extend.permissions`, except `worktree` which is a sibling of `permissions` inside `extend`.
@@ -135,7 +179,7 @@ Policy that is loaded but not applied looks exactly like policy that works, unti
 
 1. **Out of scope is refused.** `read` a path outside `scope`; the refusal must name this role's md path.
 2. **In scope is allowed.** `read` a path inside `scope` and report one line of it — otherwise check 1 also passes when *everything* is refused.
-3. **The gates run.** `mise run <task>` (or whatever `bash.allow` names) returns real output. Dependencies are prepared at dispatch: `setup.preExec` runs `~/.pi/extensions/.pi/scripts/worktree-prepare.sh`, which links `packages/pi-plugin/node_modules` and copies the helper into the worktree.
+3. **The gates run.** `mise run <task>` (or whatever `bash.allow` names) returns real output. If it produces nothing instead, the dependencies were not prepared — see [Step 2b](#step-2b-install-dependencies-in-setuppreexec).
 
 Do the same once with `async: false` if you dispatch foreground children — that is the shape where the extension is missing entirely, and nothing in the parent session shows it.
 
@@ -152,6 +196,7 @@ Per file: add `extend.permissions`, delete `tools:`, switch `systemPromptMode` t
 | `declares tools: …,edit,… but an extension … replaced the tools` | `tools:` pinned a name this host does not register | delete `tools:` |
 | Two role mds are candidates / no role selected | two md bodies share their opening text, and the tag was not matched | make the bodies distinct, or keep `systemPromptMode: append` and no `tools:` |
 | Writes fail with `EACCES` | the path is outside the write scope, `bash.writablePaths` and the artefact directories, or the task has no write configuration at all | widen `writeScope` / the role's `write`, name `writablePaths`, or deliver a report instead |
+| A task hangs with nothing on stdout; stderr says `Will retry in 1m` | dependencies were never installed before the sandbox came up, so pnpm/npm decided to install them and has no network | move the install into `setup.preExec` — [Step 2b](#step-2b-install-dependencies-in-setuppreexec) |
 
 ## Parent-side dispatch template
 
