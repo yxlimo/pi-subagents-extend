@@ -186,6 +186,8 @@ A write that lands in one of those paths still needs the command itself to be in
 
 **The deny floor is copied into every md.** Nine entries, identical in each role that has bash: history rewrites (`commit`, `push`, `rebase`, `merge`, `reset`, `clean`, `checkout`, `restore`) and `rm -rf`. There is no `include`, no `extends`, no project-level floor file: the role md is the only place a default can live, and `deny` is the one field a dispatch cannot lift. Copy the block verbatim into every role that has bash; the list is short enough to keep nine copies honest, and a role that loses an entry is one that can commit or push.
 
+It matches the **command text**, which is the one limit worth stating: if the same role also allows an interpreter (`sh`, `bash`, `node`, `python3`), then `sh -c "git commit -m x"` is not a `git commit` segment and the entry never fires. With an interpreter in `allow`, the floor refuses the command written out of habit and nothing more; what actually stops a commit is the write grant. Roles that must not commit at all should leave the interpreters out.
+
 ## Step 5: prove the role is in force
 
 Policy that is loaded but not applied looks exactly like policy that works, until the first escape. Three checks, and do them for the dispatch shape you actually use:

@@ -210,6 +210,13 @@ The whole tree readable and writable, with publishing reserved to the parent.
 `git commit` is in `deny` rather than simply left out of `write`, so no dispatch can re-allow it —
 that is what a deny list is for, and it is the one part of the role md a caller cannot override.
 
+What it matches is the command text, and that is a limit worth naming here: this example allows `sh` and
+`node`, so `sh -c "git commit -m x"` and `node -e "…"` are not a `git commit` segment and the entry
+never fires. The deny list closes the everyday slip — the command the model writes out of habit — not a
+determined detour, and behind it stands the write grant and Landlock. If committing must be *impossible*
+rather than merely unlikely, leave the interpreters out of `allow` (a task that needs them loses the
+floor); leaving them in means the floor is advice.
+
 ### A read-only researcher
 
 ```json
