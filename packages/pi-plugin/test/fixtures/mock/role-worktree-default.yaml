@@ -1,0 +1,39 @@
+# The role md's own worktree default, not a dispatch parameter.
+# Same shape as role-worktree.yaml minus the `worktree: true` argument: the only
+# thing that can put the child in a linked worktree is `extend.worktree.enabled:
+# true` in the role md. The parent's call never mentions worktrees, and the
+# child's pwd still has to come back from ~/.pi/worktrees.
+name: role-worktree-default
+sessions:
+  - name: parent
+    when:
+      systemPromptContains: "a coding agent harness"
+    turns:
+      - reply:
+          calls:
+            - name: subagent
+              args:
+                agent: role-worktree-default
+                task: >-
+                  Run pwd, then read outside/out-of-scope.txt and in-scope.txt;
+                  quote all three results verbatim.
+                async: false
+      - reply:
+          text: "Parent finished."
+  - name: child
+    when:
+      systemPromptContains: "role-worktree-default"
+    turns:
+      - reply:
+          calls:
+            - name: bash
+              args:
+                command: pwd
+            - name: read
+              args:
+                path: outside/out-of-scope.txt
+            - name: read
+              args:
+                path: in-scope.txt
+      - reply:
+          text: "{{toolResults}}"

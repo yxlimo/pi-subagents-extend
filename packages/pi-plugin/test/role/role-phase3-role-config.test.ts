@@ -81,7 +81,8 @@ console.log("pi-subagents-extend role phase 3a role-config module");
 
 // 15. A malformed or unknown top-level block is reported, and wired blocks are silent.
 {
-  assert.ok(worktreeFromBlock({ worktree: true }).problems.some((p) => p.includes("worktree must be an object")));
+  // `worktree: true` 现在是合法简写（见 role.unit 的 4b）；这里换成真正的坏值。
+  assert.ok(worktreeFromBlock({ worktree: 7 }).problems.some((p) => p.includes("worktree must be an object")));
   assert.ok(setupFromBlock({ setup: [] }).problems.some((p) => p.includes("setup must be an object")));
   assert.ok(outputFromBlock({ output: "x" }).problems.some((p) => p.includes("output must be an object")));
   const wired = policyFromBlock({ spooky: {}, worktree: {}, setup: {}, output: {} });

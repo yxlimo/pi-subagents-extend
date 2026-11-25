@@ -32,7 +32,10 @@ fn scratch(name: &str) -> PathBuf {
 fn observe(root: &Path, watch: &[&str], script: &str) -> Option<String> {
     let work = root.join("work");
     let spec_path = root.join("spec.json");
-    let watch: Vec<String> = watch.iter().map(|dir| root.join(dir).display().to_string()).collect();
+    let watch: Vec<String> = watch
+        .iter()
+        .map(|dir| root.join(dir).display().to_string())
+        .collect();
     let spec = format!(
         r#"{{"cwd":"{}","read":["/"],"write":["{}"],"watch":{}}}"#,
         work.display(),
@@ -53,9 +56,11 @@ fn observe(root: &Path, watch: &[&str], script: &str) -> Option<String> {
         return None;
     }
     let observe_path = format!("{}.observe", spec_path.display());
-    Some(fs::read_to_string(&observe_path).unwrap_or_else(|e| {
-        panic!("the helper must leave an observation at {observe_path}: {e}")
-    }))
+    Some(
+        fs::read_to_string(&observe_path).unwrap_or_else(|e| {
+            panic!("the helper must leave an observation at {observe_path}: {e}")
+        }),
+    )
 }
 
 #[test]

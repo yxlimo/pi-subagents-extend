@@ -184,7 +184,10 @@ pub fn write_result(path: &Path, wrote: Option<bool>, watched: usize) {
         Some(false) => "false",
         None => "null",
     };
-    let _ = fs::write(path, format!("{{\"wrote\":{wrote},\"watched\":{watched}}}\n"));
+    let _ = fs::write(
+        path,
+        format!("{{\"wrote\":{wrote},\"watched\":{watched}}}\n"),
+    );
 }
 
 #[cfg(test)]
@@ -202,7 +205,11 @@ mod tests {
     fn a_missing_root_is_no_watch_rather_than_an_error() {
         let dir = scratch("missing");
         let watch = Watch::new(&[dir.join("nope")]).expect("inotify is available on linux");
-        assert_eq!(watch.dirs(), 0, "a root that does not exist cannot be watched");
+        assert_eq!(
+            watch.dirs(),
+            0,
+            "a root that does not exist cannot be watched"
+        );
         assert!(!watch.finish(), "and nothing can be claimed from it");
         let _ = fs::remove_dir_all(&dir);
     }
@@ -213,7 +220,11 @@ mod tests {
         let nested = dir.join("src/nested");
         fs::create_dir_all(&nested).expect("nested dir");
         let watch = Watch::new(&[dir.clone()]).expect("inotify is available on linux");
-        assert!(watch.dirs() >= 3, "the tree is watched recursively, got {}", watch.dirs());
+        assert!(
+            watch.dirs() >= 3,
+            "the tree is watched recursively, got {}",
+            watch.dirs()
+        );
         watch.start();
         assert!(!watch.finish(), "an untouched tree reports nothing");
         fs::write(nested.join("file.txt"), "x").expect("write");

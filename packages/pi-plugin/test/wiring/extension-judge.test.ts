@@ -314,3 +314,32 @@ function writeAgentMdRaw({ cwd, role, frontmatter }: { cwd: string; role: string
   h.restore()
   console.log("  ok   an allowed todo does not reset the denial budget; the hard stop still lands")
 }
+
+// 12. A worktree block that fails to parse is REPORTED. The failure mode it replaces is the
+//     nastiest kind: the dispatch simply does not get a worktree, which looks exactly like
+//     "the md never asked for one" — the caller sees the child edit files in the checkout
+//     and has no reason to suspect the three lines they just wrote. The warning names the
+//     md, the offending text and the shape to write instead, and repeats no more than once
+//     per md (a session dispatches the same role many times).
+{
+  const proj = join(workdir, "judge-worktree-bad")
+  writeAgentMd({
+    cwd: proj,
+    role: "wt-bad",
+    extend: { permissions: { scope: ["."] }, worktree: 7 },
+  })
+  const h = await dispatchHandler({ cwd: proj })
+  const input: Record<string, unknown> = { agent: "wt-bad", task: "x" }
+  assert.equal(await h.call("subagent", input), undefined, "a bad worktree setting does not refuse the dispatch")
+  assert.equal(input.worktree, undefined, "no worktree is filled from a setting that failed to parse")
+  assert.equal(h.ui.length, 1, `exactly one warning is issued, got: ${JSON.stringify(h.ui)}`)
+  const warning = h.ui[0] ?? ""
+  assert.match(warning, /wt-bad\.md/, `the warning names the role md, got: ${warning}`)
+  assert.match(warning, /worktree must be an object/, `the warning quotes the parse problem, got: ${warning}`)
+  assert.match(warning, /will not get a worktree/, `the warning says what the caller loses, got: ${warning}`)
+  const again = await h.call("subagent", { agent: "wt-bad", task: "y" })
+  assert.equal(again, undefined, "the repeat dispatch still runs")
+  assert.equal(h.ui.length, 1, `the warning is issued once per md, got: ${JSON.stringify(h.ui)}`)
+  h.restore()
+  console.log("  ok   a malformed worktree block warns once, naming the md and the cost")
+}

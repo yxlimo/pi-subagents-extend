@@ -382,6 +382,13 @@ const subBlock = (
 /** extend.worktree → 工作树策略；缺席时不返回 worktree 字段。 */
 export function worktreeFromBlock(block: Record<string, unknown>): { worktree?: RoleWorktreeConfig; problems: string[] } {
 	const problems: string[] = [];
+	// `worktree: true|false` 是 `{enabled: …}` 的简写。这既是最自然的写法，也是唯一
+	// 不需要记嵌套层级的写法：拒掉它，配置就静默失效（实测：派单不建工作树，而调用方
+	// 完全看不出哪里写错了）。
+	const shorthand = block.worktree;
+	if (typeof shorthand === "boolean") {
+		return { worktree: { nodeModules: "keep", enabled: shorthand }, problems };
+	}
 	const raw = subBlock(block, "worktree", problems);
 	if (!raw) return { problems };
 	const worktree: RoleWorktreeConfig = { nodeModules: "keep" };

@@ -189,7 +189,10 @@ fn apply(
             // later invocations, and only this success pair goes quiet. The
             // degraded branch below is never silenced: there the warning is
             // news on every single command.
-            let quiet = matches!(std::env::var("PI_SUBAGENTS_EXTEND_QUIET_NETWORK_NOTICE").as_deref(), Ok("1"));
+            let quiet = matches!(
+                std::env::var("PI_SUBAGENTS_EXTEND_QUIET_NETWORK_NOTICE").as_deref(),
+                Ok("1")
+            );
             if spec.offline && !quiet {
                 let shadowed: Vec<String> = isolated
                     .shadowed

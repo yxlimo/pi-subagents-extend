@@ -154,7 +154,10 @@ mod tests {
         let spec = Spec::parse(r#"{"watch":["/work/src"]}"#).expect("a watch list is valid");
         assert_eq!(spec.watch, vec![PathBuf::from("/work/src")]);
         assert!(
-            Spec::parse("{}").expect("an empty spec is valid").watch.is_empty(),
+            Spec::parse("{}")
+                .expect("an empty spec is valid")
+                .watch
+                .is_empty(),
             "no watch list means no observation"
         );
         let error = Spec::parse(r#"{"watch":["src"]}"#).expect_err("relative roots are refused");

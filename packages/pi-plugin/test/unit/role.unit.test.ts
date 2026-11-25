@@ -131,6 +131,31 @@ console.log("pi-subagents-extend role/deliverable/context unit")
   ok("permissions, worktree, setup and output all parse from one extend block")
 }
 
+// 4b. `worktree: true|false` 是 `{enabled: …}` 的简写。
+//     实测过的代价：只认对象时，写成布尔的那份配置被判「worktree must be an object」后
+//     静默丢掉，派单照旧不建工作树，而写的人完全看不出区别 —— 于是「md 里写了不生效、
+//     显式传参才生效」。简写必须真的生效，同时非布尔非对象仍要报错（别把错误也吞掉）。
+{
+  const on = writeRoleMd(join(root, "wt-shorthand-on"), "wt-on", "  worktree: true\n")
+  const parsedOn = worktreeFromBlock(readExtendBlock(on).block ?? {})
+  assert.deepEqual(parsedOn.problems, [], "写 `worktree: true` 不是错误")
+  assert.equal(parsedOn.worktree?.enabled, true, "简写 true 必须真的打开工作树默认值")
+  assert.equal(parsedOn.worktree?.nodeModules, "keep", "简写不改变 nodeModules 的默认")
+
+  const off = writeRoleMd(join(root, "wt-shorthand-off"), "wt-off", "  worktree: false\n")
+  const parsedOff = worktreeFromBlock(readExtendBlock(off).block ?? {})
+  assert.equal(parsedOff.worktree?.enabled, false, "简写 false 明确关掉，不能靠缺席表达")
+
+  const bad = writeRoleMd(join(root, "wt-bad"), "wt-bad", '  worktree: "yes"\n')
+  const parsedBad = worktreeFromBlock(readExtendBlock(bad).block ?? {})
+  assert.equal(parsedBad.worktree, undefined, "非布尔也非对象时不给策略")
+  assert.ok(
+    parsedBad.problems.some((problem) => /worktree must be an object/.test(problem)),
+    `仍然要报错，不能连错误一起吞掉：${JSON.stringify(parsedBad.problems)}`,
+  )
+  ok("`worktree: true|false` 作为 enabled 的简写被接受，非法值仍然报错")
+}
+
 // 5. A misspelled top-level block is reported, not quietly dropped.
 {
   const file = writeRoleMd(join(root, "unknown-block"), "typo", [

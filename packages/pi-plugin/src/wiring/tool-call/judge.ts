@@ -208,16 +208,39 @@ interface WorktreeStrategy {
 	mdFile?: string;
 }
 
+/** 已经报过的问题（md → 问题文本）：一次派单一条命令都会读同一份 md，只该说一次。 */
+const reportedWorktreeProblems = new Set<string>();
+
+function reportWorktreeProblems(mdFile: string, problems: string[], warn: (message: string) => void): void {
+	const text = problems.join("; ");
+	const key = `${mdFile}\u0000${text}`;
+	if (reportedWorktreeProblems.has(key)) return;
+	reportedWorktreeProblems.add(key);
+	// 点名文件与键，并给出能直接照抄的写法：这几行决定派单建不建工作树，写错了不会报错，
+	// 只会不建 —— 调用方看到的是子代理在主检出里改文件。
+	warn(
+		`pi-subagents-extend: the worktree settings in ${mdFile} are ignored (${text}); the dispatch will not get a worktree. Write \`extend:\\n  worktree:\\n    enabled: true\` (or the shorthand \`extend:\\n  worktree: true\`) under \`extend:\`.`,
+	);
+}
+
 function worktreePolicyFor(
 	cwd: string,
 	call: Record<string, unknown> | undefined,
 	agent: string,
 	/** 调用方（预检）已解析过的 md 文件；缺省时按 agent 现场解析，目录序与 resolveAgentFile 相同。 */
-	resolvedMdFile?: string,
+	resolvedMdFile: string | undefined,
+	/** 配置写错时说出来：这条通路决定派单建不建工作树，闷着等于静默失效。 */
+	warn: (message: string) => void,
 ): WorktreeStrategy {
 	const mdFile = resolvedMdFile ?? (resolveAgentFile(agent, cwd, homedir()) ?? undefined);
-	const block = mdFile ? readExtendBlock(mdFile).block : undefined;
-	const enabled = worktreeFromBlock(block ?? {}).worktree?.enabled === true;
+	const read = mdFile ? readExtendBlock(mdFile) : undefined;
+	const parsed = worktreeFromBlock(read?.block ?? {});
+	// 这份配置决定「派单建不建工作树」，写错了就静默不建 —— 实测过：调用方以为 md 生效，
+	// 看到的却是子代理直接在检出里改文件。所以把解析问题说出来，每个 md 只说一次。
+	if (mdFile && (read?.problems.length || parsed.problems.length)) {
+		reportWorktreeProblems(mdFile, [...(read?.problems ?? []), ...parsed.problems], warn);
+	}
+	const enabled = parsed.worktree?.enabled === true;
 	if (enabled && (call?.worktree === undefined || call?.worktree === null)) {
 		return { worktree: true, fromMd: true, mdFile };
 	}
@@ -365,7 +388,7 @@ export const judgeToolCall = async ({
 			// 只有 worktree 这一个决策把本次派单自带的 bindings 叠在会话 bindings 之上；
 			// 其余策略解析仍用会话启动时定格的那一份，范围不因单次派单而变。
 			const own = asObject(candidate.extensionBindings)?.[bindingKey()];
-			const strategy = worktreePolicyFor(cwd, { ...w.call.config, ...w.call.blocks, ...asObject(own) }, name, mdFile);
+			const strategy = worktreePolicyFor(cwd, { ...w.call.config, ...w.call.blocks, ...asObject(own) }, name, mdFile, w.uiWarning);
 			if (shouldDefaultWorktree(strategy, event.toolName, event.input)) {
 				candidate.worktree = true;
 				if (strategy.fromMd && strategy.mdFile) warnUntrackedWorktreeProfile(cwd, strategy.mdFile, w.uiWarning);

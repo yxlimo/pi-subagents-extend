@@ -397,4 +397,56 @@ const tailOf = (run: HostRun): string => `stderr: ${run.stderr.slice(-800)}`;
   console.log(`  ok   role md 工作树：子会话 cwd=${pwdLines[0]}，越界读被拒且点名主检出角色 md`);
 }
 
-console.log("role md e2e tests passed (4 cases)");
+// 5. 角色 md 的 `extend.worktree.enabled: true` 是派单参数的唯一来路：调用的参数里
+//    从不出现 worktree，子会话仍然必须落在链接工作树里。缺这条通路时，md 里那三行
+//    就只是一段没人读的配置 —— 也正是它让「md 写了不生效、显式传参才生效」成立。
+{
+  const { run, subagent, project } = await runCase(
+    "role-worktree-default.yaml",
+    "Go.",
+    "role-worktree-default",
+    [
+      "---",
+      "name: role-worktree-default",
+      "description: Worktree default comes from the role md, not the call",
+      "inheritSkills: false",
+      "inheritProjectContext: true",
+      "tools: read, write, bash",
+      `subagentOnlyExtensions: "${EXT}"`,
+      "extend:",
+      "  worktree: true",
+      "  permissions:",
+      "    scope:",
+      "      - in-scope.txt",
+      "    bash:",
+      "      allow:",
+      "        - pwd",
+      "---",
+      "",
+      "You are role-worktree-default: quote the three tool results verbatim.",
+      "",
+    ],
+    [],
+    { commit: true },
+  );
+  const tail = tailOf(run);
+  assert.ok(
+    subagent.text.includes("IN-SCOPE-OK"),
+    `positive control: the child must have run and read in-scope.txt through the role md. ${HEAD(subagent.text)} ${tail}`,
+  );
+  const pwdLines = subagent.text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.includes("pi-worktree-") && line.startsWith("/"));
+  assert.ok(
+    pwdLines.length > 0,
+    `the role md's worktree default must put the child in a linked worktree, but pwd showed no worktree path: ${HEAD(subagent.text)} ${tail}`,
+  );
+  assert.ok(
+    pwdLines.some((line) => line !== project && !line.startsWith(`${project}/`)),
+    `the child must not run in the probe project root ${project}; pwd showed: ${pwdLines.join(" | ")} ${tail}`,
+  );
+  console.log(`  ok   role md 的工作树默认值：调用没提 worktree，子会话 cwd=${pwdLines[0]}`);
+}
+
+console.log("role md e2e tests passed (5 cases)");
