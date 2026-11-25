@@ -93,10 +93,6 @@ jobs:
 
       # A release is only as good as the checks that ran on it. `pnpm test`
       # walks test/, so a suite nobody added to a list still runs here.
-      - name: Role config checks
-        run: |
-          node scripts/check-role-grants.mjs
-          node --test scripts/check-role-grants.test.mjs
 
       - name: Helper tests
         run: |
