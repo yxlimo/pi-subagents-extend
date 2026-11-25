@@ -165,13 +165,24 @@ A role md that exists but cannot be parsed, or whose `extend` block is invalid, 
 - a leading `VAR=value` is stripped before the comparison, so an allowed program cannot be hidden behind an assignment;
 - `re:<pattern>` is a full-match regular expression when the entry starts with `re:` — that is how one entry covers a family: `re:mise run test:(policy|paths|bash)`.
 
+**One command per call: unquoted shell metacharacters are refused.** Before any matching, a command holding an unquoted `; & | < > ( ) backtick $`, a backslash, a newline, or an unbalanced quote is refused with `shell metacharacters are not allowed (; & | < > \` $ …): run one allowlisted command`. So `git status && git diff`, `git diff | head`, `cat foo > bar.txt` and `pnpm run build 2>/dev/null` are all refused — a matching allowlist prefix does not help, and neither does a `re:` entry, because this check runs first. (The one exception is a leading `VAR=value`, which is stripped rather than refused; a known-dangerous name such as `NODE_OPTIONS` is refused by name.)
+
+Quoting follows bash, since the command ends up in `bash -lc <command>`: inside single quotes nothing is special, and inside double quotes only `$` and a backtick still expand, so those two are refused there as well. Measured: `rg 'a|b' web`, `rg "a|b" web`, `node -e 'console.log(1)'` and `python3 -c "print(1)"` all pass; `echo "$HOME"` does not.
+
+What that means when you write a role:
+
+- an allowlist entry is exactly one command, so two steps are two tool calls — each judged on its own, which is the point;
+- an entry that itself contains a metacharacter can never match: `"pnpm run build 2>/dev/null"` is dead weight, because the command carrying it is refused before matching;
+- writing output to a file is the `write` tool's job (judged against the write scope), not `cmd > file`; a task that needs to silence its own stderr has to do it inside its script;
+- a gate that must chain steps belongs in `setup.preExec` (unsandboxed, one string) or in a script the repository owns;
+- this refusal is a usage error, so it does not consume the deny budget: a child that tries `&&` is told once and retries with a single command instead of being walked to a hard stop.
+
 **`bash.allow` decides whether a command may run, not what it may write.** There is no command read/write classification: `mise`, `make`, `just`, project scripts and package managers all run under the same Landlock rules. A task with a write grant gets the write scope, git's own directories, `node_modules`, the detected artefact directories and `bash.writablePaths` writable. With no write configuration the sandbox gets no writable path at all. A write outside that set is refused by the kernel while the command runs, and the failed result says `[sandbox] <path> is outside the writes the parent granted (<granted paths>) — a permission, not a filesystem fault`, pointing at `writablePaths` or a wider write scope.
-- it must still be in `bash.allow`, or it is refused;
-- mise's own state directory is pointed inside the sandbox (when the worktree has a `mise.toml`), so a task that writes state does not write it to the host — and the tool install directory is not granted either, so `mise` may run the tasks but cannot install a tool. Install tools from the parent session.
+A write that lands in one of those paths still needs the command itself to be in `bash.allow`: the grant says where a process may write, not that it may run. mise's own state directory is pointed inside the sandbox (when the worktree has a `mise.toml`), so a task that writes state does not write it to the host — and the tool install directory is not granted either, so `mise` may run the tasks but cannot install a tool. Install tools from the parent session.
 
 **Network is cut structurally.** Only listed network tools are refused up front (a refusal is friendlier than a hang); anything else that dials out — including a `mise` task — has its packets dropped inside the namespace, so it hangs or times out rather than telling you it was the network.
 
-**The deny floor is copied into every md.** Nine entries, identical in each role that has bash: history rewrites (`commit`, `push`, `rebase`, `merge`, `reset`, `clean`, `checkout`, `restore`) and `rm -rf`. There is no `include`, no `extends`, no project-level floor file: the role md is the only place a default can live, and `deny` is the one field a dispatch cannot lift. `node scripts/check-role-grants.mjs` fails when a role md with bash is missing an entry, so drift is caught rather than discovered.
+**The deny floor is copied into every md.** Nine entries, identical in each role that has bash: history rewrites (`commit`, `push`, `rebase`, `merge`, `reset`, `clean`, `checkout`, `restore`) and `rm -rf`. There is no `include`, no `extends`, no project-level floor file: the role md is the only place a default can live, and `deny` is the one field a dispatch cannot lift. Copy the block verbatim into every role that has bash; the list is short enough to keep nine copies honest, and a role that loses an entry is one that can commit or push.
 
 ## Step 5: prove the role is in force
 
