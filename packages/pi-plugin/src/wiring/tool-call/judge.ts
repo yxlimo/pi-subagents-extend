@@ -123,6 +123,11 @@ function bashPathArgAllowed(token: string, cwd: string, rule: BashRule, policy: 
 	for (const dir of privatisedDirs(cwd, scratchDir(cwd, rule))) {
 		if (underRoot(resolveComparable(dir), real)) return true;
 	}
+	// 绝对读授权同理：落在 absoluteRead 前缀内的参数路径不算越界，否则树外读授权从 bash 里不可用。
+	for (const read of policy.absoluteRead) {
+		const abs = expandPath(cwd, read);
+		if (abs && (underRoot(abs, real) || underRoot(resolveComparable(abs), real))) return true;
+	}
 	// 写授权里的路径本来就落在范围之外（pnpm store、mise state、报告目录、交付物）。
 	// 挡在这里等于让 writablePaths 从 bash 里不可用，而那正是给它们的用途。
 	for (const write of [...policy.absoluteWrite, ...rule.writablePaths]) {

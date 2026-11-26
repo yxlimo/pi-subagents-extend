@@ -11,6 +11,7 @@ export interface ActivateOptions {}
 const INACTIVE: Policy = {
 	globs: [],
 	regexps: [],
+	absoluteRead: [],
 	writeGlobs: [],
 	absoluteWrite: [],
 	writeRegexps: [],

@@ -367,6 +367,8 @@ export async function wireAgentStart(w: Wiring, event: BeforeAgentStartEvent, ct
 				[SCOPE_SECTION]: scopeText({
 					source: w.roleSource ?? w.policy.source,
 					read: w.policy.globs,
+					// 绝对读前缀落在工作树之外，单独一行告诉子代理（混进 read 会被当成树内 glob）。
+					absoluteRead: w.policy.absoluteRead,
 					write: [...w.policy.writeGlobs, ...w.policy.absoluteWrite],
 					...(bash
 						? { bash: { allow: bash.allow, deny: bash.deny, network: bash.network, writablePaths: bash.writablePaths } }

@@ -11,6 +11,8 @@ export interface ScopeSummary {
 	source: string;
 	/** 读范围（policy.globs 里的原始 glob 字符串）；空数组表示整个工作树。 */
 	read: string[];
+	/** 绝对读授权（policy.absoluteRead）：父代理点名的树外读前缀；缺省或空表示没有。 */
+	absoluteRead?: string[];
 	/** 写范围：policy.writeGlobs 与 policy.absoluteWrite 合并；空数组表示没有写授权。 */
 	write: string[];
 	bash?: { allow: string[]; deny: string[]; network: boolean; writablePaths: string[] };
@@ -27,8 +29,12 @@ export function scopeText(summary: ScopeSummary): string {
 		"",
 		`- Configuration: ${summary.source}`,
 		`- Read: ${summary.read.length > 0 ? summary.read.join(", ") : "the whole working directory"}`,
-		`- Write: ${summary.write.length > 0 ? summary.write.join(", ") : "nothing — this task is read-only"}`,
 	];
+	// 绝对读前缀单独一行：它们落在工作树之外，混进 Read 行会让模型以为那是树内 glob。
+	if (summary.absoluteRead && summary.absoluteRead.length > 0) {
+		lines.push(`- Absolute read: ${summary.absoluteRead.join(", ")}`);
+	}
+	lines.push(`- Write: ${summary.write.length > 0 ? summary.write.join(", ") : "nothing — this task is read-only"}`);
 
 	if (summary.bash) {
 		lines.push(

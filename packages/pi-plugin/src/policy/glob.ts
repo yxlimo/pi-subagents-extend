@@ -23,6 +23,14 @@ export interface ToolDeclaration {
 export interface Policy {
 	globs: string[];
 	regexps: RegExp[];
+	/**
+	 * scope 里写绝对路径的那几条，已 realpath，按前缀比对。
+	 *
+	 * 与 absoluteWrite 对称：相对读授权绑在项目树上（matches 里「落在工作树之外一律不认」是
+	 * 软链逃逸的唯一防线），但父代理明确点名要子代理读树外证据（如仓库外的设计文档）时，绝对
+	 * 路径是父代理的显式授权，不是子代理能自己构造的逃逸，所以单独放行；相对授权的老规则一点不动。
+	 */
+	absoluteRead: string[];
 	/** 写范围（edit / write 工具）。没配 writeScope 时等于读范围；readOnly 时为空。 */
 	writeGlobs: string[];
 	/**
@@ -130,10 +138,10 @@ export function matches(regexps: RegExp[], cwd: string, target: string): boolean
 }
 
 /**
- * 绝对授权（writeScope 里的绝对路径）按前缀比对，允许落在树外。
+ * 绝对授权（scope / writeScope 里的绝对路径）按前缀比对，允许落在树外。
  *
- * 只给写用：读范围继续绑定在项目树上。绝对路径是父代理点名的，子代理无法自己构造，
- * 所以它不破坏「相对授权不能出树」那条防线。
+ * 读与写共用：相对授权绑在项目树上（matches 里「落在工作树之外一律不认」是软链逃逸的唯一防线），
+ * 绝对路径是父代理点名的，子代理无法自己构造，所以它不破坏「相对授权不能出树」那条防线。
  */
 export function underAny(grants: string[], cwd: string, target: string): boolean {
 	if (grants.length === 0) return false;

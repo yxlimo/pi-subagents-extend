@@ -166,6 +166,9 @@ export function activate(pi: ExtensionAPI, options: ActivateOptions = {}) {
 						? undefined
 						: `Write scope: ${[...w.policy.writeGlobs, ...w.policy.absoluteWrite].join(" | ") || "(none)"}`,
 					`Read scope: ${w.policy.globs.join(" | ") || "(none)"}`,
+					w.policy.absoluteRead.length > 0
+						? `Absolute read: ${w.policy.absoluteRead.join(" | ")}`
+						: undefined,
 					`Read denials: ${w.denyCounter.status()} · write denials: ${w.writeDenyCounter.status()}`,
 					w.policy.bash
 						? permissionAllowColumn(w.policy.bash)

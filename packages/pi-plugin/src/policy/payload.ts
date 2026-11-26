@@ -74,6 +74,7 @@ export function denyAll(source: string): Policy {
 	return {
 		globs: [],
 		regexps: [],
+		absoluteRead: [],
 		writeGlobs: [],
 		absoluteWrite: [],
 		writeRegexps: [],
@@ -277,6 +278,12 @@ export function parsePolicyObject(
 		return denyAll(`${source}.scope is missing; everything is refused`);
 	}
 	const globs = scopeGiven ? (scope as string[]).map((g) => g.trim()).filter(Boolean) : [];
+
+	// 绝对条目是父代理点名的树外读授权，与 writeScope 的绝对条目同构：相对条目进 globs 由
+	// matches() 按真实路径绑在树上，绝对条目单独收进 absoluteRead 由 underAny() 按前缀比对。
+	// 两者并存取并集（判定里 matches(...) || underAny(...)），没有绝对条目时与旧行为逐字节相同。
+	const absoluteRead = globs.filter((g) => isAbsolute(g)).map((g) => canonical(g));
+	const readGlobs = globs.filter((g) => !isAbsolute(g));
 	const readOnly = config.readOnly === true;
 	const write = parseWriteScope(config, globs, readOnly, source);
 	if (write.error) return denyAll(write.error);
@@ -290,8 +297,9 @@ export function parsePolicyObject(
 		? (config.allowTools as unknown[]).filter((t): t is string => typeof t === "string" && t.trim() !== "")
 		: [];
 	return {
-		globs,
-		regexps: compile(globs),
+		globs: readGlobs,
+		regexps: compile(readGlobs),
+		absoluteRead,
 		writeGlobs,
 		absoluteWrite,
 		writeRegexps: compile(writeGlobs),

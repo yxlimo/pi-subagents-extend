@@ -86,7 +86,8 @@ const pathToolVerdict = (
 		else anchorMiss = resolved;
 	}
 
-	const readable = (path: string): boolean => matches(w.policy.regexps, cwd, path);
+	const readable = (path: string): boolean =>
+		matches(w.policy.regexps, cwd, path) || underAny(w.policy.absoluteRead, cwd, path);
 	const writable = (path: string): boolean =>
 		matches(w.policy.writeRegexps, cwd, path) || underAny(w.policy.absoluteWrite, cwd, path);
 
@@ -186,7 +187,10 @@ const pathToolVerdict = (
 				: `pi-subagents-extend: ${event.toolName} has no "${kind.pathArg}" — without a target nothing can be checked, so no scope can allow it (source: ${w.policy.source}). Pass it explicitly.\nWrite scope: ${preview(w.policy.writeGlobs)}`,
 		);
 	}
-	const readOk = matches(w.policy.regexps, cwd, target);
+	// 与上面 pathToolVerdict 的 readable 同构：绝对读授权是父代理点名的树外前缀，这条读闸也要和它
+	// 取并集，否则配置写了、判定却不认（同一函数里两个读判，只补一个就是半条链）。
+	const readOk =
+		matches(w.policy.regexps, cwd, target) || underAny(w.policy.absoluteRead, cwd, target);
 	if (isWrite) {
 		if (!matches(w.policy.writeRegexps, cwd, target) && !underAny(w.policy.absoluteWrite, cwd, target)) {
 			// 读得到、写不到：这是最常见也最容易误导的拒绝，文案要直说撞的是写范围，
