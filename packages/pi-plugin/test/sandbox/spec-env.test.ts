@@ -22,7 +22,15 @@ import { toolchainCacheDir } from "../../src/sandbox/grants.ts"
 	const input = { command: "git status" }
 	assert.equal(await h.call("bash", input), undefined, "the listed command passes")
 	const spec = specOf(input.command)
-	assert.ok(spec.env.MISE_STATE_DIR, "MISE_STATE_DIR is set even without a mise.toml in the cwd")
+	// 断严格值而不是「有值」：只判 truthy 时，把有写授权分支改回私有 tmp（M2）它照样绿，
+	// 也分不出「旧实现靠 mise.toml 才设」——本用例的整个意义就是钉住这两点。
+	const cache = toolchainCacheDir()
+	assert.ok(cache, "the harness redirects the toolchain cache into the test state dir")
+	assert.equal(
+		spec.env.MISE_STATE_DIR,
+		`${cache}/mise-state`,
+		`without a mise.toml the state still moves into the writable cache, got: ${spec.env.MISE_STATE_DIR} (cache: ${cache})`,
+	)
 	h.restore()
 	console.log("  ok   没有 mise.toml 的目录也有 MISE_STATE_DIR（mise shim 仍会登记配置）")
 }
@@ -41,9 +49,16 @@ import { toolchainCacheDir } from "../../src/sandbox/grants.ts"
 	})
 	const input = { command: "git status" }
 	assert.equal(await h.call("bash", input), undefined, "the listed command passes")
-	const state = specOf(input.command).env.MISE_STATE_DIR ?? ""
+	const spec = specOf(input.command)
+	const state = spec.env.MISE_STATE_DIR ?? ""
 	assert.ok(state.startsWith(`${cache}/`), `mise state lives under the writable cache, got: ${state} (cache: ${cache})`)
 	assert.ok(existsSync(state), `the mise state directory really exists, got: ${state}`)
+	// 「目录建好了」不等于「沙箱里能写」：真正决定能不能写的是 spec.write。mise 会在
+	// mise-state/ 下建 tracked-configs 与 task-history，没人授权它的话目录存在也白搭。
+	assert.ok(
+		spec.write.some((dir) => state === dir || state.startsWith(`${dir}/`)),
+		`a granted write dir covers the mise state dir, got: ${state} in [${spec.write.join(", ")}]`,
+	)
 	h.restore()
 	console.log("  ok   有写授权时 MISE_STATE_DIR 落在 toolchainCacheDir 下且目录已创建")
 }
@@ -92,15 +107,13 @@ import { toolchainCacheDir } from "../../src/sandbox/grants.ts"
 	console.log("  ok   父代理 bash.env 钉住的 MISE_STATE_DIR 逐字保留")
 }
 
-// 176. 任意 cwd（含 tmp 目录）都设 MISE_STATE_DIR。
+// 176. cwd 里有 mise.toml 时同样设 MISE_STATE_DIR（旧的触发条件不回归）。
 //
-// 旧名声称「cwd 有 mise.toml 时仍然有 MISE_STATE_DIR」，但 harness 的 workdir 是
-// mkdtemp(tmpdir())，findWorktreeRoot 返回 undefined —— 那条从来没造出 worktree +
-// mise.toml 的场景，它的红只是「旧实现不满足 worktree 条件就不设 env」的偶然事实。改成它
-// 真正证明的：任意 cwd（含 tmp 目录）都设 MISE_STATE_DIR。
+// 这条**不能**分辨新旧实现：旧实现恰恰只在有 mise.toml 时才设，所以它在旧实现下也绿。
+// 它现在的价值是防止有人把整段 env 设置删掉，而「没有 mise.toml 也必须设」由 172 钉住。
 //
-// 不补真 worktree fixture：新规则与 cwd 形状无关 —— sandboxEnv 现在连 cwd 形参都没有了，
-// 造 worktree 只会增加夹具而不增加判别力。
+// 上一版把它改名成「任意 cwd（含 tmp 目录）都设」，与夹具不符：夹具在 cwd 里写了 mise.toml
+// （见下面的 writeFileSync），声称测「任意 cwd」就抓不到「依赖 mise.toml」这一类回归。
 {
 	const cwd = join(workdir, "spec-env-with-mise")
 	mkdirSync(cwd, { recursive: true })
@@ -113,7 +126,7 @@ import { toolchainCacheDir } from "../../src/sandbox/grants.ts"
 	})
 	const input = { command: "git status" }
 	assert.equal(await h.call("bash", input), undefined, "the listed command passes")
-	assert.ok(specOf(input.command).env.MISE_STATE_DIR, "any cwd, a tmp directory included, sets MISE_STATE_DIR")
+	assert.ok(specOf(input.command).env.MISE_STATE_DIR, "a cwd with a mise.toml still gets MISE_STATE_DIR")
 	h.restore()
-	console.log("  ok   任意 cwd（含 tmp 目录）都设置 MISE_STATE_DIR")
+	console.log("  ok   有 mise.toml 的 cwd 同样设置 MISE_STATE_DIR（旧触发条件不回归）")
 }
