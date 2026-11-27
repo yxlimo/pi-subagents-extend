@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, s
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import type { BashRule } from "../bash/index.ts";
-import { CONVENTIONAL_TMP, dropHiddenGrants, expandPath, findWorktreeRoot, privatisedDirs, resolveComparable } from "../paths/index.ts";
+import { CONVENTIONAL_TMP, dropHiddenGrants, expandPath, privatisedDirs, resolveComparable } from "../paths/index.ts";
 import type { Policy } from "../policy/index.ts";
 import { hasWriteGrant, reportHiddenGrants, sandboxWritableDirs, SANDBOX_DEVICE_PATHS, stateDir, toolchainCacheDir } from "./grants.ts";
 
@@ -38,13 +38,28 @@ function gitExcludesFile(): string | undefined {
  * - bindings 给的 bash.env
  * - XDG_RUNTIME_DIR：默认指向沙箱私有的 /tmp。pnpm 12 把自己的锁目录放在
  *   XDG_RUNTIME_DIR（/run/user/<uid>）下，只读根下连 `pnpm run` 都跑不起来。
- * - MISE_STATE_DIR：worktree 场景下 mise 要把新 worktree 的 mise.toml 登记进
- *   ~/.local/state/mise/trusted-configs，只读根下解析配置阶段就失败；
- *   把 state 目录挪到沙箱私有的 /tmp 即可免掉这次登记。
+ * - MISE_STATE_DIR：总是指向沙箱里一个可写的目录（理由见下）。
+ *
+ * MISE_STATE_DIR 之前只在「工作树里有 mise.toml」时才设，前提是错的。mise 是 node
+ * 工具链（npm / pnpm / node）的 shim 入口：任何 node 命令都可能 exec 进 mise，而 mise
+ * 会把发现的配置文件登记进 <state>/tracked-configs/，登记面**含 package.json**（宿主
+ * 全局开了 idiomatic_version_file_enable_tools）。所以没有 mise.toml 的仓库里
+ * `npm pack` 同样会去写 ~/.local/state/mise/ → Landlock 拒绝。登记面与「仓库里有没有
+ * mise.toml」无关，就不能拿那个条件决定要不要挪。
+ *
+ * 实测排除掉的开关（免得下次再找一遍）：`tracked_config_files` 不是真设置名
+ *（Unknown setting）；MISE_OFFLINE / MISE_RAW / MISE_DISABLE_TOOLS / MISE_NO_ENV /
+ * MISE_SAFE_MODE 全都照样写；MISE_NO_CONFIG=1 有效但代价太大（禁掉全部配置加载，工具链
+ * 跟着没了）。只有 MISE_STATE_DIR 真的有效：symlink 全落指定目录、真实目录 0 条、
+ * WARN 归零。
+ *
+ * 落在哪：有写授权时放工具链缓存目录下的 mise-state/（与上面 XDG_CACHE_HOME 同构，
+ * 且跨调用持久 —— trusted-configs / task-history 在里面）；只读沙箱没有可写的宿主目录，
+ * 放沙箱私有的 /tmp。
  *
  * 两者都可以被父代理用 bash.env 覆盖。
  */
-function sandboxEnv(cwd: string, rule: BashRule, policy: Policy): Record<string, string> {
+function sandboxEnv(rule: BashRule, policy: Policy): Record<string, string> {
 	const env: Record<string, string> = { ...rule.env };
 	const privateDir = `/tmp/.pi-subagents-extend-${process.pid}`;
 	// git 的全局排除：子代理 `git add -A` 时不把依赖目录吸进索引。
@@ -65,9 +80,21 @@ function sandboxEnv(cwd: string, rule: BashRule, policy: Policy): Record<string,
 		if (cache && !env.XDG_CACHE_HOME) env.XDG_CACHE_HOME = cache;
 	}
 	if (!env.MISE_STATE_DIR) {
-		const worktreeRoot = findWorktreeRoot(cwd);
-		const miseConfig = worktreeRoot ? resolve(worktreeRoot, "mise.toml") : undefined;
-		if (miseConfig && existsSync(miseConfig)) env.MISE_STATE_DIR = `${privateDir}/mise`;
+		// 有写授权：落在工具链缓存目录里，跨调用持久（trusted-configs / task-history 在里面）。
+		if (hasWriteGrant(policy, rule)) {
+			const cache = toolchainCacheDir();
+			if (cache) {
+				const miseState = `${cache}/mise-state`;
+				try {
+					mkdirSync(miseState, { recursive: true });
+					env.MISE_STATE_DIR = miseState;
+				} catch {
+					// 建不出来就退回私有的 /tmp（下面的兜底）。
+				}
+			}
+		}
+		// 只读沙箱：没有可写的宿主目录，落在沙箱私有的 /tmp（helper 挂的私有 tmpfs）。
+		if (!env.MISE_STATE_DIR) env.MISE_STATE_DIR = `${privateDir}/mise`;
 	}
 	return env;
 }
@@ -191,7 +218,7 @@ export function buildSpec(
 		// 只在开启时写：spec 是 deny_unknown_fields，旧版 helper 拿到这个键会直接拒掉整份
 		// spec，所以关闭时必须连键都不出现。
 		...(rule.cpuStallSeconds === false ? {} : { stallSeconds: rule.cpuStallSeconds }),
-		env: sandboxEnv(cwd, rule, policy),
+		env: sandboxEnv(rule, policy),
 	};
 }
 

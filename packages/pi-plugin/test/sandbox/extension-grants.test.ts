@@ -54,8 +54,11 @@ import { restoreState } from "../support.ts"
   assert.equal(spec.env.FOO, "bar", "bash.env is injected")
   assert.match(
     spec.env.MISE_STATE_DIR ?? "",
-    /mise$/,
-    "mise state moves off the read-only root so trust registration is not needed",
+    // 有写授权时必须落在工具链缓存里的 mise-state/：写成 /mise(-state)?$/ 对「落到私有
+    // /tmp 的 /mise」也成立，就分不出「挪到可写处」和「挪到只读沙箱的私有 tmp」两种实现。
+    // 变异验证：把有写授权分支改回 ${privateDir}/mise，这条必须红。
+    /\/mise-state$/,
+    "mise state moves into the writable toolchain cache so trust registration is not needed",
   )
   assert.match(spec.env.XDG_RUNTIME_DIR ?? "", /runtime$/, "pnpm's runtime lock dir moves off the read-only root")
   h.restore()
