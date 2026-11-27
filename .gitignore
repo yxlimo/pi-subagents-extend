@@ -10,3 +10,5 @@ packages/pi-plugin/.test-*
 .test-state/
 # 内部文档：开发日志、实测记录，不对外
 docs/internal/
+# 角色 md 的 output.deliverable 落点（子代理报告），不参与版本控制
+context/
