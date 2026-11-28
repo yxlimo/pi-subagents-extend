@@ -1,6 +1,6 @@
 {
   "name": "pi-subagents-extend",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Everything a pi session needs around subagents: scope what a delegated subagent may touch, and keep main-agent-only context out of child prompts",
   "type": "module",
   "license": "MIT",
