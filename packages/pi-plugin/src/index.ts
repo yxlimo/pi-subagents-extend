@@ -49,12 +49,14 @@ import { discoverResources, disposeOnShutdown, injectHandoffNotes } from "./wiri
 import { wireAgentStart } from "./wiring/agent-start.ts";
 import { wireSessionStart } from "./wiring/session-start.ts";
 import { createWiring, type ActivateOptions } from "./wiring/context.ts";
+import { createOwnership, createOwnHandler, ownerPathOf } from "./session-owner.ts";
 import { bashBlocker, describePnpmStore, helperPath, sandboxWritableDirs } from "./sandbox/index.ts";
 export { dropHiddenGrants, findWorktreeRoot, privatisedDirs, resolveComparable } from "./paths/index.ts";
 export { sortedEntries, sortByName } from "./dependencies.ts";
 export { buildSpec, detectPnpmStore, describeHelper, helperCandidates, sandboxWritableDirs, wrapInSandbox, type HelperCapabilities } from "./sandbox/index.ts";
 export { nodeModulesWriteHint, wireDeliverable, wirePreExec, wireWorktree } from "./wiring/agent-start.ts";
 export { SCOPE_SECTION, scopeText, type ScopeSummary } from "./scope-prompt.ts";
+export { createOwnership, ownerTable, OWNER, type Ownership } from "./session-owner.ts";
 
 /**
  * /permission 的 allow 列。写不写由目录授权决定，与「命令在不在白名单」无关，
@@ -100,6 +102,13 @@ export function activate(pi: ExtensionAPI, options: ActivateOptions = {}) {
 		// 只读 api：退化成没有去重。
 	}
 	const w = createWiring();
+	// 同一个会话里只让一份扩展副本干活（见 session-owner.ts）：扩展被加载两份时，两套 handler
+	// 会把同一条命令判两遍 —— 第一份把它包成沙箱调用，第二份比对不上 bash.allow，整个子会话
+	// 的 bash 全被拒。归属由事件 ctx 上的会话身份决定：扩展入口拿不到它。
+	const ownership = createOwnership({ owner: ownerPathOf(import.meta.url) });
+	// pi.on 的唯一入口：事件进来先问归属。不是本副本管的会话，整个让出去 —— handler 直接返回
+	// undefined，不抛错（抛错会让 pi 把这次调用记成扩展故障）。
+	const own = createOwnHandler(ownership);
 	// 绑定与方法约定（skill）一起提供给会话：扩展被加载，skill 就进系统提示的
 	// 可用列表；父代理据此知道委派时传 extensionBindings。已上锁的会话不注册——
 	// 它不委派，也不该去读一个自己被范围拦住的文件。
@@ -109,44 +118,49 @@ export function activate(pi: ExtensionAPI, options: ActivateOptions = {}) {
 
 
 
-	pi.on("resources_discover", async () => discoverResources(w));
-	pi.on("before_agent_start", async (event, ctx) => wireAgentStart(w, event, ctx));
+	pi.on("resources_discover", async (_event, ctx) => own(ctx, () => discoverResources(w)));
+	pi.on("before_agent_start", async (event, ctx) => own(ctx, () => wireAgentStart(w, event, ctx)));
+	pi.on("session_start", async (event, ctx) => own(ctx, () => wireSessionStart(w, options, event, ctx)));
 
-	pi.on("session_start", async (event, ctx) => wireSessionStart(w, options, event, ctx));
-
-	pi.on("session_shutdown", async () => disposeOnShutdown(w));
+	// 清理不参与归属判定：惰性的那一份也 armed 过探针，不释放它就一直挂在进程里。
+	// 交出归属由 release 自己判：只有当前主人能交，别人抢走的位子不归它删。
+	pi.on("session_shutdown", async (_event, ctx) => {
+		ownership.release(ctx);
+		disposeOnShutdown(w);
+	});
 
 	// tool_result 干三件事：
 	// 1. 探针 3 要看 bash 的输出；
 	// 2. 子代理的 worktree 单会在这里返回交接单路径，就地补一句「该看哪个键」；
 	// 3. 离线沙箱里的网络失败要就地说明「这是主代理没授权」，否则子代理会当成
 	//    环境坏了，换 registry / 加 timeout 反复重试。
-	pi.on("tool_result", async (event) => annotateToolResult(w, event));
+	pi.on("tool_result", async (event, ctx) => own(ctx, () => annotateToolResult(w, event)));
 
 	// 后台子代理完成后，pi-subagents 用 sendMessage 把通知注入会话（正文带 `Parallel handoff:`）。
 	// 实测 message_end 不会为这种注入消息触发，所以改用 context：每次 LLM 调用前拿到完整
 	// 消息表，就地补一句。它就是模型实际看到的内容，不依赖通知用什么 role 送达。
-	pi.on("context", async (event) => injectHandoffNotes(event));
+	pi.on("context", async (event, ctx) => own(ctx, () => injectHandoffNotes(event)));
 
-
-	pi.on("tool_call", async (event, ctx) => {
-		const verdict = await judgeToolCall({ pi, w, schemaPathArgs, event, ctx });
-		// 放行的调用把两类「连续」计数都清零。判据是连续而不是累计：子代理改了做法就该重新计数，
-		// 否则早期的一次误判会在几十轮之后把任务判死。
-		//
-		// 求援通道不清零：它是报告，不是进展。否则每次试探之间插一句 contact_supervisor 就能
-	// 求援通道不清零：它是报告，不是进展。否则每次试探之间插一句 contact_supervisor 就能
-	// 永远停在「警告」档，硬停判据直接失效。
-	//
-	// RUNTIME_TOOLS（todo）同样不清零，理由同源：它是会话自身的簿记，不是任务进展。
-	// 若放行的 todo 也归零，子代理就能在两次拒之间插一句 todo 把连续计数洗掉，
-	// 永远到不了硬停 —— 与求援通道被排除在归零之外是同一个道理。
-	if (verdict === undefined && !SAFE_TOOLS.includes(event.toolName) && !RUNTIME_TOOLS.includes(event.toolName)) {
-			w.denyCounter.reset();
-			w.writeDenyCounter.reset();
-		}
-		return verdict;
-	});
+	pi.on("tool_call", async (event, ctx) =>
+		own(ctx, async () => {
+			const verdict = await judgeToolCall({ pi, w, schemaPathArgs, event, ctx });
+			// 放行的调用把两类「连续」计数都清零。判据是连续而不是累计：子代理改了做法就该重新计数，
+			// 否则早期的一次误判会在几十轮之后把任务判死。
+			//
+			// 求援通道不清零：它是报告，不是进展。否则每次试探之间插一句 contact_supervisor 就能
+			// 求援通道不清零：它是报告，不是进展。否则每次试探之间插一句 contact_supervisor 就能
+			// 永远停在「警告」档，硬停判据直接失效。
+			//
+			// RUNTIME_TOOLS（todo）同样不清零，理由同源：它是会话自身的簿记，不是任务进展。
+			// 若放行的 todo 也归零，子代理就能在两次拒之间插一句 todo 把连续计数洗掉，
+			// 永远到不了硬停 —— 与求援通道被排除在归零之外是同一个道理。
+			if (verdict === undefined && !SAFE_TOOLS.includes(event.toolName) && !RUNTIME_TOOLS.includes(event.toolName)) {
+				w.denyCounter.reset();
+				w.writeDenyCounter.reset();
+			}
+			return verdict;
+		}),
+	);
 
 	pi.registerCommand("permission", {
 		description: "Show the current task scope, the bash allowlist and the probe state",
